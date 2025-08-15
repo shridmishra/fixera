@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SubNavbar from "@/components/SubNavbar";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,6 +37,7 @@ export default function RootLayout({
         <Navbar/>
         <SubNavbar />
         <main className="flex flex-col min-h-screen">
+          <Toaster></Toaster>
         {children}
         </main>
         <Footer />
