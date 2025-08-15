@@ -1,13 +1,13 @@
 'use client'
 
+
 import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Mail, Phone, ArrowLeft, CheckCircle, Clock, Shield, Smartphone, AtSign } from "lucide-react"
-// import { toast } from "sonner"
-// import axios from "axios"
+import { toast } from "sonner"
 
 interface DualVerificationProps {
   email: string;
@@ -37,6 +37,7 @@ const DualVerificationComponent: React.FC<DualVerificationProps> = ({
   onVerificationSuccess,
   onBack
 }) => {
+ 
   const [verificationState, setVerificationState] = useState<VerificationState>({
     emailVerified: false,
     phoneVerified: false,
@@ -83,7 +84,7 @@ const DualVerificationComponent: React.FC<DualVerificationProps> = ({
   // Check if both verifications are complete
   useEffect(() => {
     if (verificationState.emailVerified && verificationState.phoneVerified) {
-      console.log("Both email and phone verified successfully!");
+      toast.success("Both email and phone verified successfully!");
       setTimeout(() => {
         onVerificationSuccess();
       }, 1500);
@@ -92,76 +93,136 @@ const DualVerificationComponent: React.FC<DualVerificationProps> = ({
 
   const sendEmailOTP = async () => {
     setVerificationState(prev => ({ ...prev, emailResendLoading: true }));
-    
-    // Simulate API call for demo
-    setTimeout(() => {
-      // Mock success response
-      console.log("Email verification code sent!");
-      setVerificationState(prev => ({ 
-        ...prev, 
-        emailResendLoading: false,
-        emailResendDisabled: true, 
-        emailResendTime: 60 
-      }));
-    }, 1500);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-email/send-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success("Email verification code sent!");
+        setVerificationState(prev => ({ 
+          ...prev, 
+          emailResendDisabled: true, 
+          emailResendTime: 60 
+        }));
+      } else {
+        toast.error(data.message || "Failed to send email OTP");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send email OTP");
+    } finally {
+      setVerificationState(prev => ({ ...prev, emailResendLoading: false }));
+    }
   };
 
   const sendPhoneOTP = async () => {
     setVerificationState(prev => ({ ...prev, phoneResendLoading: true }));
-    
-    // Simulate API call for demo
-    setTimeout(() => {
-      // Mock success response
-      console.log("Phone verification code sent!");
-      setVerificationState(prev => ({ 
-        ...prev, 
-        phoneResendLoading: false,
-        phoneResendDisabled: true, 
-        phoneResendTime: 60 
-      }));
-    }, 1500);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-phone`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify({ phone })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success("Phone verification code sent!");
+        setVerificationState(prev => ({ 
+          ...prev, 
+          phoneResendDisabled: true, 
+          phoneResendTime: 60 
+        }));
+      } else {
+        toast.error(data.message || "Failed to send phone OTP");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send phone OTP");
+    } finally {
+      setVerificationState(prev => ({ ...prev, phoneResendLoading: false }));
+    }
   };
 
   const verifyEmailOTP = async () => {
     if (!verificationState.emailOTP) {
-      console.log("Please enter the email verification code");
+      toast.error("Please enter the email verification code");
       return;
     }
+    
 
     setVerificationState(prev => ({ ...prev, emailLoading: true }));
-    
-    // Simulate API call for demo
-    setTimeout(() => {
-      // Mock verification - accept "123456" as valid code
-      if (verificationState.emailOTP === "123456") {
-        console.log("Email verified successfully!");
-        setVerificationState(prev => ({ ...prev, emailVerified: true, emailLoading: false }));
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-email/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify({
+          email,
+          otp: verificationState.emailOTP
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success("Email verified successfully!");
+        setVerificationState(prev => ({ ...prev, emailVerified: true }));
       } else {
-        console.log("Invalid email verification code");
-        setVerificationState(prev => ({ ...prev, emailLoading: false }));
+        toast.error(data.message || "Invalid email verification code");
       }
-    }, 2000);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to verify email");
+    } finally {
+      setVerificationState(prev => ({ ...prev, emailLoading: false }));
+    }
   };
 
   const verifyPhoneOTP = async () => {
     if (!verificationState.phoneOTP) {
-      console.log("Please enter the phone verification code");
+      toast.error("Please enter the phone verification code");
       return;
     }
 
     setVerificationState(prev => ({ ...prev, phoneLoading: true }));
-    
-    // Simulate API call for demo
-    setTimeout(() => {
-      // Mock verification - accept "654321" as valid code
-      if (verificationState.phoneOTP === "654321") {
-        console.log("Phone verified successfully!");
-        setVerificationState(prev => ({ ...prev, phoneVerified: true, phoneLoading: false }));
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-phone-check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify({
+          phone,
+          otp: verificationState.phoneOTP
+        })
+      });
+      
+      const data = await response.json();
+      console.log(data);
+      
+      if (data.success) {
+        toast.success("Phone verified successfully!");
+        setVerificationState(prev => ({ ...prev, phoneVerified: true }));
       } else {
-        console.log("Invalid phone verification code");
-        setVerificationState(prev => ({ ...prev, phoneLoading: false }));
+        toast.error(data.message || "Invalid phone verification code");
       }
-    }, 2000);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to verify phone");
+    } finally {
+      setVerificationState(prev => ({ ...prev, phoneLoading: false }));
+    }
   };
 
   const formatTime = (seconds: number) => {

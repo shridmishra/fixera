@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Eye, EyeOff, User, Mail, Lock, Briefcase, Phone } from "lucide-react"
 import { CountryCode, countryCodes } from "@/lib/helpers"
 import { toast } from "sonner"
-import axios from "axios"
+import { useAuth } from "@/contexts/AuthContext"
+import { useRouter } from "next/navigation"
 import DualVerificationComponent from "@/components/DualVerificationComponent"
-
 
 interface FormData {
   name: string;
@@ -35,47 +35,119 @@ const JoinPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [showVerification, setShowVerification] = useState<boolean>(false)
 
+  const { signup, user } = useAuth()
+  const router = useRouter()
+
+  const validateForm = (): boolean => {
+    if (!formData.name.trim()) {
+      toast.error("Please enter your full name")
+      return false
+    }
+    if (!formData.email.trim()) {
+      toast.error("Please enter your email address")
+      return false
+    }
+    if (!formData.phone.trim()) {
+      toast.error("Please enter your phone number")
+      return false
+    }
+    if (!formData.password.trim()) {
+      toast.error("Please enter a password")
+      return false
+    }
+    if (formData.password.length < 6) {
+      toast.error("Password must be at least 6 characters long")
+      return false
+    }
+    if (!formData.role) {
+      toast.error("Please select your role")
+      return false
+    }
+    return true
+  }
+
+  const sendVerificationCodes = async (): Promise<void> => {
+    try {
+      const fullPhoneNumber = `${formData.countryCode}${formData.phone}`
+      
+      // Send both email and phone OTPs
+      const responses = await Promise.allSettled([
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-email/send-otp`, {
+          method: 'POST',
+          credentials: 'include', // Include cookies
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email: formData.email })
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-phone`, {
+          method: 'POST',
+          credentials: 'include', // Include cookies
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ phone: fullPhoneNumber })
+        })
+      ])
+
+      const emailResult = responses[0]
+      const phoneResult = responses[1]
+
+      let emailSent = false
+      let phoneSent = false
+
+      if (emailResult.status === 'fulfilled' && emailResult.value.ok) {
+        emailSent = true
+      }
+
+      if (phoneResult.status === 'fulfilled' && phoneResult.value.ok) {
+        phoneSent = true
+      }
+
+      if (emailSent && phoneSent) {
+        toast.success("Verification codes sent to your email and phone!")
+      } else if (emailSent || phoneSent) {
+        toast.success("Verification codes sent! Some may have failed - you can resend them.")
+      } else {
+        toast.error("Failed to send verification codes. You can resend them manually.")
+      }
+
+      setShowVerification(true)
+    } catch (error) {
+      console.error("OTP sending error:", error)
+      toast.error("Account created but failed to send verification codes. You can request them manually.")
+      setShowVerification(true)
+    }
+  }
+
   const handleSubmit = async (): Promise<void> => {
+    if (!validateForm()) return
+
     setIsLoading(true)
 
     try {
       const fullPhoneNumber = `${formData.countryCode}${formData.phone}`
       const submitData = {
-        ...formData,
-        phone: fullPhoneNumber
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: fullPhoneNumber,
+        password: formData.password,
+        role: formData.role as 'customer' | 'professional'
       }
 
-      // Create user account
-      const signupResponse = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/signup`, submitData)
-
-      if (signupResponse.status === 201) {
+      // Use the auth context register method
+      const success = await signup(submitData)
+      
+      if (success) {
         toast.success("Account created successfully! Sending verification codes...")
         
-        // Send both email and phone OTPs
-        try {
-          await Promise.all([
-            axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-email/send-otp`, {
-              email: formData.email
-            }),
-            axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/verify-phone`, {
-              phone: fullPhoneNumber
-            })
-          ]);
-          
-          toast.success("Verification codes sent to your email and phone!")
-          setShowVerification(true)
-        } catch (otpError: any) {
-          console.error("OTP sending error:", otpError)
-          toast.error("Account created but failed to send verification codes. You can request them manually.")
-          setShowVerification(true)
-        }
-      } else {
-        toast.error("Something went wrong during signup")
+        // Send verification codes after successful registration
+        await sendVerificationCodes()
       }
       
     } catch (error: any) {
       console.error("Submission error:", error)
-      toast.error(error.response?.data?.msg || "Failed to create account")
+      toast.error("An unexpected error occurred. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -86,14 +158,23 @@ const JoinPage: React.FC = () => {
   }
 
   const handleVerificationSuccess = (): void => {
-    toast.success("Account verified successfully! Please login to continue")
+    toast.success("Account verified successfully! Welcome to Fixera!")
     
+    // Redirect based on user role
+    if (user?.role === 'professional') {
+      router.push('/dashboard/professional')
+    } else if (user?.role === 'customer') {
+      router.push('/dashboard/customer')
+    } else {
+      router.push('/dashboard')
+    }
   }
 
   const handleBackToSignup = (): void => {
     setShowVerification(false)
   }
 
+  // Show verification component if user is registered but not verified
   if (showVerification) {
     return (
       <DualVerificationComponent
@@ -184,7 +265,7 @@ const JoinPage: React.FC = () => {
                     type="tel"
                     placeholder="Enter phone number"
                     value={formData.phone}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
+                    onChange={(e) => handleInputChange("phone", e.target.value.replace(/\D/g, ''))} // Only allow numbers
                     className="pl-10"
                     required
                   />
@@ -215,6 +296,9 @@ const JoinPage: React.FC = () => {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <p className="text-xs text-gray-500">
+                Password must be at least 6 characters long
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -241,7 +325,7 @@ const JoinPage: React.FC = () => {
             <Button
               onClick={handleSubmit}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isLoading}
+              disabled={isLoading || !formData.name || !formData.email || !formData.phone || !formData.password || !formData.role}
             >
               {isLoading ? "Creating Account..." : "Create Account"}
             </Button>

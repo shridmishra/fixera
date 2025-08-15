@@ -4,7 +4,17 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Menu, X, Hammer } from "lucide-react";
+import { Menu, X, Hammer, User, LogOut } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const otherLinks = [
   { name: "For Professionals", href: "/professionals" },
@@ -15,6 +25,7 @@ const otherLinks = [
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const { user, isAuthenticated, logout, loading } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -64,12 +75,54 @@ const Navbar = () => {
             </nav>
 
             <div className="hidden lg:flex items-center space-x-2">
-              <Button asChild variant="ghost">
-                <Link href="/login">Sign In</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/join">Join</Link>
-              </Button>
+              {!loading && (
+                <>
+                  {isAuthenticated ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-blue-100 text-blue-600">
+                              {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-56" align="end" forceMount>
+                        <DropdownMenuLabel className="font-normal">
+                          <div className="flex flex-col space-y-1">
+                            <p className="text-sm font-medium leading-none">{user?.name}</p>
+                            <p className="text-xs leading-none text-muted-foreground">
+                              {user?.email}
+                            </p>
+                          </div>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                          <Link href="/dashboard">
+                            <User className="mr-2 h-4 w-4" />
+                            <span>Dashboard</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={logout}>
+                          <LogOut className="mr-2 h-4 w-4" />
+                          <span>Log out</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <>
+                      <Button asChild variant="ghost">
+                        <Link href="/login">Sign In</Link>
+                      </Button>
+                      <Button asChild>
+                        <Link href="/join">Join</Link>
+                      </Button>
+                    </>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
@@ -120,12 +173,41 @@ const Navbar = () => {
           <hr className="my-2" />
         </nav>
         <div className="p-4 border-t space-y-3 bg-gray-50">
-          <Button asChild variant="outline" className="w-full">
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button asChild className="w-full">
-            <Link href="/join">Join</Link>
-          </Button>
+          {!loading && (
+            <>
+              {isAuthenticated ? (
+                <>
+                  <div className="flex items-center space-x-3 p-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-blue-100 text-blue-600">
+                        {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                    </div>
+                  </div>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                  <Button onClick={logout} variant="outline" className="w-full">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Log out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/login">Sign In</Link>
+                  </Button>
+                  <Button asChild className="w-full">
+                    <Link href="/join">Join</Link>
+                  </Button>
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
     </>
