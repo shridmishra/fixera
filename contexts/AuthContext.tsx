@@ -12,6 +12,39 @@ interface User {
   role: 'admin' | 'visitor' | 'customer' | 'professional'
   isEmailVerified: boolean
   isPhoneVerified: boolean
+  vatNumber?: string
+  isVatVerified?: boolean
+  idProofUrl?: string
+  idProofFileName?: string
+  idProofUploadedAt?: string
+  isIdVerified?: boolean
+  professionalStatus?: 'pending' | 'approved' | 'rejected' | 'suspended'
+  approvedBy?: string
+  approvedAt?: string
+  rejectionReason?: string
+  businessInfo?: {
+    companyName?: string
+    description?: string
+    website?: string
+    address?: string
+    city?: string
+    country?: string
+    postalCode?: string
+  }
+  hourlyRate?: number
+  currency?: string
+  serviceCategories?: string[]
+  availability?: {
+    monday?: { available: boolean; startTime?: string; endTime?: string }
+    tuesday?: { available: boolean; startTime?: string; endTime?: string }
+    wednesday?: { available: boolean; startTime?: string; endTime?: string }
+    thursday?: { available: boolean; startTime?: string; endTime?: string }
+    friday?: { available: boolean; startTime?: string; endTime?: string }
+    saturday?: { available: boolean; startTime?: string; endTime?: string }
+    sunday?: { available: boolean; startTime?: string; endTime?: string }
+  }
+  blockedDates?: string[]
+  profileCompletedAt?: string
   createdAt: string
   updatedAt: string
 }

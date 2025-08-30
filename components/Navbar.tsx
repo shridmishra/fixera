@@ -104,6 +104,12 @@ const Navbar = () => {
                             <span>Dashboard</span>
                           </Link>
                         </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/profile">
+                            <User className="mr-2 h-4 w-4" />
+                            <span>Profile</span>
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={logout}>
                           <LogOut className="mr-2 h-4 w-4" />
@@ -190,6 +196,9 @@ const Navbar = () => {
                   </div>
                   <Button asChild variant="outline" className="w-full">
                     <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/profile">Profile</Link>
                   </Button>
                   <Button onClick={logout} variant="outline" className="w-full">
                     <LogOut className="mr-2 h-4 w-4" />
