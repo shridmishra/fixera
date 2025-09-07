@@ -37,6 +37,13 @@ export default function ProfilePage() {
     error?: string
     companyName?: string
     companyAddress?: string
+    parsedAddress?: {
+      streetAddress?: string;
+      city?: string;
+      postalCode?: string;
+      country?: string;
+    };
+    autoPopulateRecommended?: boolean;
   }>({})
 
   // Professional profile states
@@ -70,7 +77,17 @@ export default function ProfilePage() {
   const [blockingMode, setBlockingMode] = useState<'single' | 'range'>('range')
   const [profileSaving, setProfileSaving] = useState(false)
   const [showAutoPopulateDialog, setShowAutoPopulateDialog] = useState(false)
-  const [pendingVatData, setPendingVatData] = useState<any>(null)
+  const [pendingVatData, setPendingVatData] = useState<{
+    vatNumber: string;
+    companyName?: string;
+    companyAddress?: string;
+    parsedAddress?: {
+      streetAddress?: string;
+      city?: string;
+      postalCode?: string;
+      country?: string;
+    };
+  } | null>(null)
   const [verificationSubmitting, setVerificationSubmitting] = useState(false)
 
   useEffect(() => {
@@ -380,11 +397,11 @@ export default function ProfilePage() {
         // Update business info state with populated data
         setBusinessInfo(prev => ({
           ...prev,
-          companyName: result.businessInfo.companyName || prev.companyName,
-          address: result.businessInfo.address || prev.address,
-          city: result.businessInfo.city || prev.city,
-          country: result.businessInfo.country || prev.country,
-          postalCode: result.businessInfo.postalCode || prev.postalCode,
+          companyName: result.businessInfo?.companyName || prev.companyName,
+          address: result.businessInfo?.parsedAddress?.streetAddress || prev.address,
+          city: result.businessInfo?.parsedAddress?.city || prev.city,
+          country: result.businessInfo?.parsedAddress?.country || prev.country,
+          postalCode: result.businessInfo?.parsedAddress?.postalCode || prev.postalCode,
         }))
         
         toast.success('✅ Business information auto-populated from VAT data!')
@@ -392,7 +409,7 @@ export default function ProfilePage() {
       } else {
         toast.error(result.error || 'Failed to auto-populate business information')
       }
-    } catch (error) {
+    } catch (_) {
       toast.error('Failed to auto-populate business information')
     } finally {
       setVatSaving(false)
@@ -422,7 +439,7 @@ export default function ProfilePage() {
           toast.error(result.error || 'Failed to submit for verification')
         }
       }
-    } catch (error) {
+    } catch (_) {
       toast.error('Failed to submit for verification')
     } finally {
       setVerificationSubmitting(false)
@@ -1021,7 +1038,7 @@ export default function ProfilePage() {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="timezone">Business Timezone</Label>
-                      <Select defaultValue={user?.businessInfo?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}>
+                      <Select defaultValue={Intl.DateTimeFormat().resolvedOptions().timeZone}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select timezone" />
                         </SelectTrigger>
@@ -1044,7 +1061,7 @@ export default function ProfilePage() {
                       </Select>
                       <p className="text-xs text-gray-500">
                         Current: {new Intl.DateTimeFormat('en', {
-                          timeZone: user?.businessInfo?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+                          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                           timeZoneName: 'long'
                         }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value}
                       </p>
@@ -1054,7 +1071,7 @@ export default function ProfilePage() {
                       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <p className="text-sm font-medium text-blue-800">
                           {new Date().toLocaleString('en-US', {
-                            timeZone: user?.businessInfo?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+                            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                             weekday: 'short',
                             hour: '2-digit',
                             minute: '2-digit',
@@ -1369,7 +1386,7 @@ export default function ProfilePage() {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
-              {user?.role === 'team_member' && (
+              {user?.role === 'professional' && (
                 <TabsTrigger value="availability">Availability</TabsTrigger>
               )}
             </TabsList>
@@ -1432,7 +1449,7 @@ export default function ProfilePage() {
               <PasswordChange />
             </TabsContent>
 
-            {user?.role === 'team_member' && (
+            {user?.role === 'professional' && (
               <TabsContent value="availability" className="space-y-6">
                 <TeamMemberAvailability />
               </TabsContent>

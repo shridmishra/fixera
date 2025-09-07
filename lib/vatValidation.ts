@@ -159,7 +159,16 @@ interface UpdateVATResponse {
 
 export const validateAndPopulateVAT = async (vatNumber: string, autoPopulate: boolean = false): Promise<UpdateVATResponse & { 
   validationResult?: VatValidationResult;
-  businessInfo?: any;
+  businessInfo?: {
+    companyName?: string;
+    parsedAddress?: {
+      streetAddress?: string;
+      city?: string;
+      postalCode?: string;
+      country?: string;
+    };
+    vatNumber?: string;
+  };
 }> => {
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/vat/validate-and-populate`, {

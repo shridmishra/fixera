@@ -5,20 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
-import { Separator } from "@/components/ui/separator"
 import { 
   User, 
   Mail, 
   UserPlus, 
   Calendar, 
-  Clock, 
-  Eye, 
-  EyeOff, 
   RotateCcw,
   AlertCircle,
   CheckCircle,
@@ -38,16 +33,26 @@ interface TeamMember {
   acceptedAt?: string
   isActive: boolean
   managedByCompany: boolean
-  availability?: any
+  availability?: {
+    [day: string]: {
+      isAvailable: boolean;
+      startTime?: string;
+      endTime?: string;
+    };
+  }
   blockedDates?: Date[]
-  blockedRanges?: any[]
+  blockedRanges?: {
+    startDate: string;
+    endDate: string;
+    reason?: string;
+  }[]
 }
 
 interface TeamManagementProps {
   companyName: string
 }
 
-export default function TeamManagement({ companyName }: TeamManagementProps) {
+export default function TeamManagement({ companyName: _ }: TeamManagementProps) {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
@@ -287,7 +292,7 @@ export default function TeamManagement({ companyName }: TeamManagementProps) {
                           <span className="font-medium">Company-managed employee</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          You will manage this employee's availability directly
+                          You will manage this employee&apos;s availability directly
                         </p>
                       </div>
                     )}
