@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState, useCallback } from "react"
 import { User, Phone, Calendar, CheckCircle, XCircle, Eye, LucideChartNoAxesColumn, ClosedCaption, AlertTriangle, FileText, Shield, X } from "lucide-react"
-import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 
 interface Professional {
@@ -635,7 +634,7 @@ export default function ProfessionalsAdminPage() {
               
               {/* Debug info */}
               <div className="text-xs text-gray-500 mt-1 p-2 bg-gray-50 rounded">
-                <strong>Debug:</strong> Reason length: {rejectionModal.reason.length}, Value: "{rejectionModal.reason}"
+                <strong>Debug:</strong> Reason length: {rejectionModal.reason.length}, Value: &quot;{rejectionModal.reason}&quot;
               </div>
             </div>
 

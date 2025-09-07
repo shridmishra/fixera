@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { 
   Calendar, 
-  Clock, 
   Building,
   User,
   Loader2,
@@ -26,14 +25,24 @@ interface TeamMemberAvailabilityProps {
 
 interface AvailabilityData {
   availabilityPreference: 'personal' | 'same_as_company'
-  effectiveAvailability: any
+  effectiveAvailability: {
+    [day: string]: {
+      isAvailable: boolean;
+      startTime?: string;
+      endTime?: string;
+    };
+  }
   effectiveBlockedDates: Date[]
-  effectiveBlockedRanges: any[]
+  effectiveBlockedRanges: {
+    startDate: string;
+    endDate: string;
+    reason?: string;
+  }[]
 }
 
 export default function TeamMemberAvailability({ className }: TeamMemberAvailabilityProps) {
   const { user } = useAuth()
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [availabilityData, setAvailabilityData] = useState<AvailabilityData | null>(null)
   const [availabilityPreference, setAvailabilityPreference] = useState<'personal' | 'same_as_company'>('personal')
@@ -49,59 +58,49 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
     sunday: { available: false, startTime: '09:00', endTime: '17:00' }
   })
 
-  // Check if user is a team member
-  if (user?.role !== 'team_member') {
-    return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Team Member Availability
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <User className="h-12 w-12 mx-auto mb-2" />
-            <p className="text-sm">This feature is only available for team members</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   // Fetch effective availability
   const fetchAvailability = async () => {
     try {
       setLoading(true)
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/team/availability/effective`, {
         method: 'GET',
-        credentials: 'include'
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
       })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setAvailabilityData(data.data)
-        setAvailabilityPreference(data.data.availabilityPreference)
-        
-        // If personal preference, load personal availability
-        if (data.data.availabilityPreference === 'personal' && data.data.effectiveAvailability) {
-          setAvailability(data.data.effectiveAvailability)
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setAvailabilityData(data.data)
+          setAvailabilityPreference(data.data.availabilityPreference)
+          
+          // If personal, set the availability state
+          if (data.data.availabilityPreference === 'personal' && data.data.effectiveAvailability) {
+            setAvailability(data.data.effectiveAvailability)
+          }
+          
+          console.log('✅ Team member availability loaded')
+        } else {
+          console.error('❌ Failed to load availability:', data.msg)
+          toast.error(data.msg || 'Failed to load availability')
         }
       } else {
-        console.error('Failed to fetch availability:', data.msg)
+        console.error('❌ Failed to load availability - server error')
         toast.error('Failed to load availability')
       }
     } catch (error) {
-      console.error('Error fetching availability:', error)
+      console.error('❌ Error loading availability:', error)
       toast.error('Failed to load availability')
     } finally {
       setLoading(false)
     }
   }
 
-  // Update availability preference
-  const updatePreference = async (preference: 'personal' | 'same_as_company') => {
+  // Save availability preference
+  const saveAvailabilityPreference = async (preference: 'personal' | 'same_as_company') => {
     try {
       setSaving(true)
       
@@ -113,26 +112,31 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
         credentials: 'include',
         body: JSON.stringify({ availabilityPreference: preference })
       })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setAvailabilityPreference(preference)
-        toast.success('Availability preference updated')
-        fetchAvailability() // Refresh to get new effective availability
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setAvailabilityPreference(preference)
+          toast.success('✅ Availability preference updated!')
+          
+          // Reload to get updated effective availability
+          await fetchAvailability()
+        } else {
+          toast.error(data.msg || 'Failed to update preference')
+        }
       } else {
-        toast.error(data.msg || 'Failed to update preference')
+        toast.error('Failed to update preference')
       }
     } catch (error) {
-      console.error('Error updating preference:', error)
+      console.error('❌ Error updating preference:', error)
       toast.error('Failed to update preference')
     } finally {
       setSaving(false)
     }
   }
 
-  // Update personal availability
-  const updatePersonalAvailability = async () => {
+  // Save personal availability
+  const savePersonalAvailability = async () => {
     try {
       setSaving(true)
       
@@ -144,17 +148,22 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
         credentials: 'include',
         body: JSON.stringify({ availability })
       })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        toast.success('Personal availability updated')
-        fetchAvailability() // Refresh data
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          toast.success('✅ Personal availability updated!')
+          
+          // Reload to get updated effective availability
+          await fetchAvailability()
+        } else {
+          toast.error(data.msg || 'Failed to update availability')
+        }
       } else {
-        toast.error(data.msg || 'Failed to update availability')
+        toast.error('Failed to update availability')
       }
     } catch (error) {
-      console.error('Error updating availability:', error)
+      console.error('❌ Error updating availability:', error)
       toast.error('Failed to update availability')
     } finally {
       setSaving(false)
@@ -182,7 +191,8 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
     fetchAvailability()
   }, [])
 
-  if (loading) {
+  // Check if user is a team member
+  if (user?.role !== 'professional') {
     return (
       <Card className={className}>
         <CardHeader>
@@ -192,9 +202,9 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
-            <span>Loading availability...</span>
+          <div className="text-center py-8 text-muted-foreground">
+            <User className="h-12 w-12 mx-auto mb-2" />
+            <p className="text-sm">This feature is only available for team members</p>
           </div>
         </CardContent>
       </Card>
@@ -228,7 +238,7 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
                   ? 'border-primary bg-primary/5' 
                   : 'border-muted hover:border-muted-foreground/20'
               }`}
-              onClick={() => updatePreference('personal')}
+              onClick={() => saveAvailabilityPreference('personal')}
             >
               <div className="flex items-center space-x-3">
                 <div className={`w-4 h-4 rounded-full border-2 ${
@@ -258,7 +268,7 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
                   ? 'border-primary bg-primary/5' 
                   : 'border-muted hover:border-muted-foreground/20'
               }`}
-              onClick={() => updatePreference('same_as_company')}
+              onClick={() => saveAvailabilityPreference('same_as_company')}
             >
               <div className="flex items-center space-x-3">
                 <div className={`w-4 h-4 rounded-full border-2 ${
@@ -276,7 +286,7 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
                     <span className="font-medium">Same as Company</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Follow your company's availability schedule
+                    Follow your company&apos;s availability schedule
                   </p>
                 </div>
               </div>
@@ -306,7 +316,7 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-base font-medium">Personal Schedule</Label>
-              <Button onClick={updatePersonalAvailability} disabled={saving}>
+              <Button onClick={savePersonalAvailability} disabled={saving}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 <Save className="h-4 w-4 mr-2" />
                 Save Schedule
@@ -392,7 +402,7 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
                     return (
                       <div key={day} className="flex items-center justify-between text-sm">
                         <span className="font-medium">{dayLabels[index]}</span>
-                        {dayData?.available ? (
+                        {dayData?.isAvailable ? (
                           <span className="text-green-600">
                             {dayData.startTime} - {dayData.endTime}
                           </span>

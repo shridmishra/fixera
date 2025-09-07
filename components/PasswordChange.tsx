@@ -21,7 +21,7 @@ interface PasswordChangeProps {
 }
 
 export default function PasswordChange({ className }: PasswordChangeProps) {
-  const { user } = useAuth()
+  const { user: _ } = useAuth()
   const [loading, setLoading] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
