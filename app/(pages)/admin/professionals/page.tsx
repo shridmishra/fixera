@@ -60,6 +60,20 @@ export default function ProfessionalsAdminPage() {
     reason: '',
     error: null
   })
+  
+  const [suspensionModal, setSuspensionModal] = useState<{
+    isOpen: boolean;
+    professionalId: string;
+    professionalName: string;
+    reason: string;
+    error: string | null;
+  }>({
+    isOpen: false,
+    professionalId: '',
+    professionalName: '',
+    reason: '',
+    error: null
+  })
 
   useEffect(() => {
     if (!loading && (!isAuthenticated || user?.role !== 'admin')) {
@@ -134,6 +148,43 @@ export default function ProfessionalsAdminPage() {
     })
   }
 
+  // Handle suspension modal
+  const openSuspensionModal = (professionalId: string, professionalName: string) => {
+    console.log('Opening suspension modal for:', professionalName);
+    setSuspensionModal({
+      isOpen: true,
+      professionalId,
+      professionalName,
+      reason: '',
+      error: null
+    })
+  }
+
+  const closeSuspensionModal = () => {
+    setSuspensionModal({
+      isOpen: false,
+      professionalId: '',
+      professionalName: '',
+      reason: '',
+      error: null
+    })
+  }
+
+  const handleSuspensionSubmit = () => {
+    const { reason, professionalId } = suspensionModal
+    
+    if (!reason || reason.trim().length < 10) {
+      setSuspensionModal(prev => ({
+        ...prev,
+        error: 'Suspension reason must be at least 10 characters long'
+      }))
+      return
+    }
+
+    handleAction(professionalId, 'suspend', reason.trim())
+    closeSuspensionModal()
+  }
+
   const handleRejectionSubmit = () => {
     const { reason, professionalId } = rejectionModal
     
@@ -149,7 +200,7 @@ export default function ProfessionalsAdminPage() {
     closeRejectionModal()
   }
 
-  const handleAction = async (professionalId: string, action: 'approve' | 'reject' | 'suspend', reason?: string) => {
+  const handleAction = async (professionalId: string, action: 'approve' | 'reject' | 'suspend' | 'reactivate', reason?: string) => {
     setActionLoading(professionalId)
     setApprovalError(null)   
     try {
@@ -434,18 +485,25 @@ export default function ProfessionalsAdminPage() {
 
                     {professional.professionalStatus === 'approved' && (
                       <Button
-                        onClick={() => {
-                          const reason = prompt('Please provide a reason for suspension:')
-                          if (reason && reason.trim().length >= 10) {
-                            handleAction(professional._id, 'suspend', reason)
-                          }
-                        }}
+                        onClick={() => openSuspensionModal(professional._id, professional.name)}
                         disabled={actionLoading === professional._id}
                         size="sm"
                         variant="destructive"
                       >
                         <ClosedCaption className="h-4 w-4 mr-1" />
                         Suspend
+                      </Button>
+                    )}
+
+                    {professional.professionalStatus === 'suspended' && (
+                      <Button
+                        onClick={() => handleAction(professional._id, 'reactivate')}
+                        disabled={actionLoading === professional._id}
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Reactivate
                       </Button>
                     )}
                   </div>
@@ -663,6 +721,94 @@ export default function ProfessionalsAdminPage() {
                   <>
                     <XCircle className="h-3 w-3 mr-1" />
                     Send Rejection
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suspension Modal */}
+      {suspensionModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-yellow-700">
+                Suspend Professional
+              </h3>
+              <Button
+                onClick={closeSuspensionModal}
+                variant="ghost"
+                size="sm"
+                className="p-1"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                You are about to suspend <strong>{suspensionModal.professionalName}</strong>
+              </p>
+              <p className="text-xs text-gray-500 mb-4">
+                They will receive an email notification about the suspension and will not be able to accept new bookings until reactivated.
+              </p>
+
+              <Label htmlFor="suspensionReason" className="text-sm font-medium">
+                Reason for Suspension *
+              </Label>
+              <textarea
+                id="suspensionReason"
+                placeholder="Please provide a detailed reason (minimum 10 characters)..."
+                value={suspensionModal.reason}
+                onChange={(e) => {
+                  setSuspensionModal(prev => ({
+                    ...prev,
+                    reason: e.target.value,
+                    error: null
+                  }));
+                }}
+                className="mt-1 flex min-h-[100px] w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500 focus-visible:ring-offset-2"
+                rows={4}
+              />
+              
+              {suspensionModal.error && (
+                <p className="text-red-600 text-xs mt-1">
+                  {suspensionModal.error}
+                </p>
+              )}
+              
+              <p className="text-xs text-gray-400 mt-1">
+                {suspensionModal.reason.length}/10 characters minimum
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                onClick={closeSuspensionModal}
+                variant="outline"
+                size="sm"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSuspensionSubmit}
+                disabled={actionLoading === suspensionModal.professionalId}
+                variant="destructive"
+                size="sm"
+                className="flex-1 bg-yellow-600 hover:bg-yellow-700"
+              >
+                {actionLoading === suspensionModal.professionalId ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                    Suspending...
+                  </>
+                ) : (
+                  <>
+                    <ClosedCaption className="h-3 w-3 mr-1" />
+                    Suspend Professional
                   </>
                 )}
               </Button>
