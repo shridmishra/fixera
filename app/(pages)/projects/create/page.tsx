@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import WizardLayout from '@/components/professional/project-wizard/WizardLayout'
 import Step1BasicInfo from '@/components/professional/project-wizard/Step1BasicInfo'
 import Step2Subprojects from '@/components/professional/project-wizard/Step2Subprojects'
@@ -121,6 +121,8 @@ interface ProjectData {
 
 export default function ProjectCreatePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const projectId = searchParams.get('id')
   const [currentStep, setCurrentStep] = useState(1)
   const [projectData, setProjectData] = useState<ProjectData>({
     currentStep: 1,
@@ -146,18 +148,80 @@ export default function ProjectCreatePage() {
   const [canProceed, setCanProceed] = useState(false)
   const [stepValidation, setStepValidation] = useState<boolean[]>(new Array(8).fill(false))
 
+  // Load existing project data if editing
+  useEffect(() => {
+    if (projectId) {
+      const loadProject = async () => {
+        setIsLoading(true)
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/${projectId}`, {
+            credentials: 'include'
+          })
+
+          if (response.ok) {
+            const project = await response.json()
+            setProjectData({
+              id: project._id,
+              currentStep: project.currentStep || 1,
+              category: project.category,
+              service: project.service,
+              areaOfWork: project.areaOfWork,
+              distance: project.distance || {
+                address: '',
+                useCompanyAddress: false,
+                maxKmRange: 50,
+                noBorders: false
+              },
+              media: project.media || { images: [] },
+              keywords: project.keywords || [],
+              projectType: project.projectType || [],
+              subprojects: project.subprojects || [],
+              extraOptions: project.extraOptions || [],
+              termsConditions: project.termsConditions || [],
+              faq: project.faq || [],
+              rfqQuestions: project.rfqQuestions || [],
+              postBookingQuestions: project.postBookingQuestions || [],
+              resources: project.resources,
+              description: project.description,
+              priceModel: project.priceModel,
+              title: project.title,
+              customConfirmationMessage: project.customConfirmationMessage
+            })
+            setCurrentStep(project.currentStep || 1)
+            // Enable all steps for existing projects
+            setStepValidation(new Array(8).fill(true))
+            setCanProceed(true)
+          } else {
+            toast.error('Failed to load project data')
+          }
+        } catch (error) {
+          console.error('Failed to load project:', error)
+          toast.error('Failed to load project data')
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      loadProject()
+    }
+  }, [projectId])
+
   // Manual save function for draft
   const saveProjectDraft = async () => {
     try {
+      const dataToSave = {
+        ...projectData,
+        currentStep
+      }
+
+      console.log('Saving project data:', dataToSave)
+
       const response = await fetch('/api/projects/draft', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...projectData,
-          currentStep
-        }),
+        body: JSON.stringify(dataToSave),
         credentials: 'include'
       })
 
@@ -169,7 +233,9 @@ export default function ProjectCreatePage() {
         toast.success('Project draft saved successfully!')
         return savedProject
       } else {
-        throw new Error('Failed to save')
+        const errorData = await response.json()
+        console.error('Save failed:', errorData)
+        throw new Error(errorData.error || 'Failed to save')
       }
     } catch (error) {
       console.error('Save error:', error)
@@ -180,17 +246,27 @@ export default function ProjectCreatePage() {
   const handleStepChange = (step: number) => {
     setCurrentStep(step)
     setProjectData(prev => ({ ...prev, currentStep: step }))
-    // Set canProceed based on target step validation
-    const targetStepValid = stepValidation[step - 1] || false
-    setCanProceed(targetStepValid)
+    // If editing existing project, always allow navigation
+    if (projectId) {
+      setCanProceed(true)
+    } else {
+      // Set canProceed based on target step validation for new projects
+      const targetStepValid = stepValidation[step - 1] || false
+      setCanProceed(targetStepValid)
+    }
   }
 
   const handleNext = () => {
     if (currentStep < 8 && canProceed) {
       setCurrentStep(currentStep + 1)
-      // Reset canProceed for next step validation
-      const nextStepValid = stepValidation[currentStep] || false
-      setCanProceed(nextStepValid)
+      // If editing existing project, always allow navigation
+      if (projectId) {
+        setCanProceed(true)
+      } else {
+        // Reset canProceed for next step validation for new projects
+        const nextStepValid = stepValidation[currentStep] || false
+        setCanProceed(nextStepValid)
+      }
     }
   }
 
@@ -379,6 +455,7 @@ export default function ProjectCreatePage() {
       onSubmit={handleSubmit}
       isLoading={isLoading}
       canProceed={canProceed}
+      isEditing={!!projectId}
     >
       {renderCurrentStep()}
     </WizardLayout>

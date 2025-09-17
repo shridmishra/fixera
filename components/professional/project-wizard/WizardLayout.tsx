@@ -24,6 +24,7 @@ interface WizardLayoutProps {
   children: React.ReactNode
   isLoading?: boolean
   canProceed?: boolean
+  isEditing?: boolean
 }
 
 const WIZARD_STEPS: WizardStep[] = [
@@ -86,13 +87,14 @@ export default function WizardLayout({
   onSubmit,
   children,
   isLoading = false,
-  canProceed = true
+  canProceed = true,
+  isEditing = false
 }: WizardLayoutProps) {
   const [steps, setSteps] = useState(WIZARD_STEPS)
   const progress = (currentStep / 8) * 100
 
   const handleStepClick = (stepId: number) => {
-    if (stepId <= currentStep || steps[stepId - 1].isCompleted) {
+    if (isEditing || stepId <= currentStep || steps[stepId - 1].isCompleted) {
       onStepChange(stepId)
     }
   }
@@ -138,11 +140,11 @@ export default function WizardLayout({
                         ? "bg-blue-100 border border-blue-300"
                         : step.isCompleted
                         ? "bg-green-50 border border-green-200 hover:bg-green-100"
-                        : step.id < currentStep
+                        : step.id < currentStep || isEditing
                         ? "bg-gray-50 border border-gray-200 hover:bg-gray-100"
                         : "bg-gray-50 border border-gray-200 opacity-50 cursor-not-allowed"
                     )}
-                    disabled={step.id > currentStep && !step.isCompleted}
+                    disabled={!isEditing && step.id > currentStep && !step.isCompleted}
                   >
                     <div className="flex-shrink-0 mt-0.5">
                       {step.isCompleted ? (

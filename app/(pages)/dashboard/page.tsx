@@ -7,6 +7,7 @@ import { User, Mail, Phone, Shield, Calendar, Crown, Settings, TrendingUp, Users
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import Link from "next/link"
 
 interface LoyaltyStats {
   tierDistribution: Array<{
@@ -59,7 +60,7 @@ export default function DashboardPage() {
         }),
         fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/stats/approvals`, {
           credentials: 'include'
-        })
+        }),
       ])
 
       if (loyaltyResponse.ok) {
@@ -71,6 +72,7 @@ export default function DashboardPage() {
         const approvalData = await approvalResponse.json()
         setApprovalStats(approvalData.data.stats)
       }
+
     } catch (error) {
       console.error('Failed to fetch admin data:', error)
     } finally {
@@ -105,6 +107,7 @@ export default function DashboardPage() {
               </h1>
               <p className="text-gray-600">Welcome back, {user?.name}! Manage your platform here.</p>
             </div>
+            <Link className="text-pink-800 underline" href='/admin/projects/approval'>Approve Projects</Link>
           </div>
 
           <Tabs defaultValue="overview" className="space-y-6">
@@ -333,6 +336,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
           </Tabs>
         </div>
       </div>
