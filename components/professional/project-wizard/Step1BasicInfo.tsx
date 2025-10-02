@@ -35,6 +35,14 @@ interface ProjectData {
   serviceConfigurationId?: string
 }
 
+interface TeamMember {
+  _id: string
+  name: string
+  email?: string
+  hasEmail: boolean
+  isActive?: boolean
+}
+
 interface Step1Props {
   data: ProjectData
   onChange: (data: ProjectData) => void
@@ -63,7 +71,7 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
   const [categories, setCategories] = useState<string[]>([])
   const [services, setServices] = useState<string[]>([])
   const [areasOfWork, setAreasOfWork] = useState<string[]>([])
-  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [loadingCategories, setLoadingCategories] = useState(false)
   const [loadingServices, setLoadingServices] = useState(false)
   const [loadingAreas, setLoadingAreas] = useState(false)
