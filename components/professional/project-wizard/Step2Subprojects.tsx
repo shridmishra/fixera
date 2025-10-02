@@ -27,10 +27,17 @@ interface IIncludedItem {
   isCustom: boolean
 }
 
+interface IProfessionalInput {
+  fieldName: string
+  value: string | number | { min: number; max: number }
+}
+
 interface ISubproject {
   id: string
   name: string
   description: string
+  projectType?: string[] // NEW: Types for this subproject
+  professionalInputs?: IProfessionalInput[] // NEW: Dynamic field values
   pricing: {
     type: 'fixed' | 'unit' | 'rfq'
     amount?: number
@@ -57,10 +64,23 @@ interface ISubproject {
   warrantyPeriod: number
 }
 
+interface IDynamicField {
+  fieldName: string
+  fieldType: 'range' | 'dropdown' | 'number' | 'text'
+  unit?: string
+  label: string
+  placeholder?: string
+  isRequired: boolean
+  options?: string[]
+  min?: number
+  max?: number
+}
+
 interface ProjectData {
   subprojects?: ISubproject[]
   category?: string
   service?: string
+  areaOfWork?: string
 }
 
 interface Step2Props {
@@ -94,9 +114,48 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
     data.subprojects || []
   )
 
+  // NEW: Dynamic fields from backend
+  const [dynamicFields, setDynamicFields] = useState<IDynamicField[]>([])
+  const [projectTypes, setProjectTypes] = useState<string[]>([])
+
+  const fetchDynamicFields = async () => {
+    try {
+      const params = new URLSearchParams({
+        category: data.category || '',
+        service: data.service || ''
+      })
+      if (data.areaOfWork) {
+        params.append('areaOfWork', data.areaOfWork)
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/service-configuration/dynamic-fields?${params}`,
+        { credentials: 'include' }
+      )
+
+      if (response.ok) {
+        const result = await response.json()
+        setDynamicFields(result.data.professionalInputFields || [])
+        setProjectTypes(result.data.projectTypes || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch dynamic fields:', error)
+      toast.error('Failed to load service configuration')
+    }
+  }
+
+  // Fetch dynamic fields when category/service changes
+  useEffect(() => {
+    if (data.category && data.service) {
+      fetchDynamicFields()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.category, data.service, data.areaOfWork])
+
   useEffect(() => {
     onChange({ ...data, subprojects })
     validateForm()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subprojects])
 
   const validateForm = () => {
@@ -121,6 +180,8 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
       id: Date.now().toString(),
       name: '',
       description: '',
+      projectType: [], // NEW: Empty types array
+      professionalInputs: [], // NEW: Empty inputs array
       pricing: {
         type: 'fixed',
         amount: 0
@@ -136,6 +197,38 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
     }
 
     setSubprojects([...subprojects, newSubproject])
+  }
+
+  // NEW: Helper to update professional input values
+  const updateProfessionalInput = (subprojectId: string, fieldName: string, value: string | number | { min: number; max: number }) => {
+    const subproject = subprojects.find(s => s.id === subprojectId)
+    if (!subproject) return
+
+    const existingInputs = subproject.professionalInputs || []
+    const existingIndex = existingInputs.findIndex(i => i.fieldName === fieldName)
+
+    let updatedInputs
+    if (existingIndex >= 0) {
+      updatedInputs = [...existingInputs]
+      updatedInputs[existingIndex] = { fieldName, value }
+    } else {
+      updatedInputs = [...existingInputs, { fieldName, value }]
+    }
+
+    updateSubproject(subprojectId, { professionalInputs: updatedInputs })
+  }
+
+  // NEW: Helper to toggle project type
+  const toggleProjectType = (subprojectId: string, type: string) => {
+    const subproject = subprojects.find(s => s.id === subprojectId)
+    if (!subproject) return
+
+    const currentTypes = subproject.projectType || []
+    const updatedTypes = currentTypes.includes(type)
+      ? currentTypes.filter(t => t !== type)
+      : [...currentTypes, type]
+
+    updateSubproject(subprojectId, { projectType: updatedTypes })
   }
 
   const removeSubproject = (id: string) => {
@@ -292,6 +385,146 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                     {subproject.description.length}/500 characters
                   </p>
                 </div>
+
+                {/* NEW: Project Types */}
+                {projectTypes.length > 0 && (
+                  <div className="border rounded-lg p-4 bg-green-50">
+                    <h4 className="font-semibold mb-3">Project Types *</h4>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Select all types of projects this package applies to
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {projectTypes.map(type => (
+                        <div key={type} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`type-${subproject.id}-${type}`}
+                            checked={subproject.projectType?.includes(type) || false}
+                            onCheckedChange={() => toggleProjectType(subproject.id, type)}
+                          />
+                          <Label htmlFor={`type-${subproject.id}-${type}`} className="text-sm">
+                            {type}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* NEW: Dynamic Fields from Service Configuration */}
+                {dynamicFields.length > 0 && (
+                  <div className="border rounded-lg p-4 bg-purple-50">
+                    <h4 className="font-semibold mb-3 flex items-center">
+                      <Info className="w-4 h-4 mr-2" />
+                      Service Details
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Fill in the specific details for this service package
+                    </p>
+                    <div className="space-y-4">
+                      {dynamicFields.map(field => {
+                        const currentValue = subproject.professionalInputs?.find(i => i.fieldName === field.fieldName)?.value
+
+                        if (field.fieldType === 'dropdown') {
+                          return (
+                            <div key={field.fieldName}>
+                              <Label>{field.label} {field.isRequired && '*'}</Label>
+                              <Select
+                                value={typeof currentValue === 'string' ? currentValue : ''}
+                                onValueChange={(value) => updateProfessionalInput(subproject.id, field.fieldName, value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={field.placeholder || `Select ${field.label}`} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {field.options?.map(option => (
+                                    <SelectItem key={option} value={option}>
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )
+                        }
+
+                        if (field.fieldType === 'range') {
+                          const rangeValue = typeof currentValue === 'object' && currentValue !== null ? currentValue : { min: 0, max: 0 }
+                          return (
+                            <div key={field.fieldName}>
+                              <Label>{field.label} {field.isRequired && '*'}</Label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Input
+                                    type="number"
+                                    placeholder={`Min ${field.unit || ''}`}
+                                    min={field.min}
+                                    max={field.max}
+                                    value={rangeValue.min || ''}
+                                    onChange={(e) => updateProfessionalInput(subproject.id, field.fieldName, {
+                                      min: parseInt(e.target.value) || 0,
+                                      max: rangeValue.max || 0
+                                    })}
+                                  />
+                                </div>
+                                <div>
+                                  <Input
+                                    type="number"
+                                    placeholder={`Max ${field.unit || ''}`}
+                                    min={field.min}
+                                    max={field.max}
+                                    value={rangeValue.max || ''}
+                                    onChange={(e) => updateProfessionalInput(subproject.id, field.fieldName, {
+                                      min: rangeValue.min || 0,
+                                      max: parseInt(e.target.value) || 0
+                                    })}
+                                  />
+                                </div>
+                              </div>
+                              {field.unit && (
+                                <p className="text-xs text-gray-500 mt-1">Unit: {field.unit}</p>
+                              )}
+                            </div>
+                          )
+                        }
+
+                        if (field.fieldType === 'number') {
+                          return (
+                            <div key={field.fieldName}>
+                              <Label>{field.label} {field.isRequired && '*'}</Label>
+                              <Input
+                                type="number"
+                                placeholder={field.placeholder || field.label}
+                                min={field.min}
+                                max={field.max}
+                                value={typeof currentValue === 'number' ? currentValue : ''}
+                                onChange={(e) => updateProfessionalInput(subproject.id, field.fieldName, parseFloat(e.target.value) || 0)}
+                              />
+                              {field.unit && (
+                                <p className="text-xs text-gray-500 mt-1">Unit: {field.unit}</p>
+                              )}
+                            </div>
+                          )
+                        }
+
+                        if (field.fieldType === 'text') {
+                          return (
+                            <div key={field.fieldName}>
+                              <Label>{field.label} {field.isRequired && '*'}</Label>
+                              <Input
+                                type="text"
+                                placeholder={field.placeholder || field.label}
+                                value={typeof currentValue === 'string' ? currentValue : ''}
+                                onChange={(e) => updateProfessionalInput(subproject.id, field.fieldName, e.target.value)}
+                              />
+                            </div>
+                          )
+                        }
+
+                        return null
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Pricing */}
                 <div className="border rounded-lg p-4 bg-blue-50">

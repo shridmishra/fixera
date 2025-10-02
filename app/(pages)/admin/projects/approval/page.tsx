@@ -58,7 +58,7 @@ export default function ProjectApprovalPage() {
 
   const fetchPendingProjects = async () => {
     try {
-      const response = await fetch('/api/projects/admin/pending', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/admin/pending`, {
         credentials: 'include'
       })
 
@@ -78,7 +78,7 @@ export default function ProjectApprovalPage() {
   const handleApprove = async (projectId: string) => {
     setActionLoading(true)
     try {
-      const response = await fetch(`/api/projects/admin/${projectId}/approve`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/admin/${projectId}/approve`, {
         method: 'PUT',
         credentials: 'include'
       })
@@ -105,7 +105,7 @@ export default function ProjectApprovalPage() {
 
     setActionLoading(true)
     try {
-      const response = await fetch(`/api/projects/admin/${projectId}/reject`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/admin/${projectId}/reject`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
