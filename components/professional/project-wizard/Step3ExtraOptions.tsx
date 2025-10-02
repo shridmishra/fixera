@@ -143,9 +143,10 @@ export default function Step3ExtraOptions({ data, onChange, onValidate }: Step3P
   }, [extraOptions, termsConditions])
 
   const validateForm = () => {
-    // Extra options are optional (0-10)
-    // Terms conditions require at least 1, max 5
-    const isValid = termsConditions.length >= 1 && termsConditions.length <= 5
+    // Step 3 is completely optional - both extra options and terms are optional
+    // Extra options: 0-10
+    // Terms conditions: 0-5 (not required)
+    const isValid = true // Always valid - this step is optional
     onValidate(isValid)
   }
 
@@ -415,9 +416,9 @@ export default function Step3ExtraOptions({ data, onChange, onValidate }: Step3P
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <FileText className="w-5 h-5" />
-              <span>Terms & Conditions (Required, 1-5 items)</span>
+              <span>Terms & Conditions (Optional, 0-5 items)</span>
             </div>
-            <Badge variant={termsConditions.length >= 1 ? "default" : "destructive"}>
+            <Badge variant="outline">
               {termsConditions.length}/5
             </Badge>
           </CardTitle>
@@ -426,14 +427,6 @@ export default function Step3ExtraOptions({ data, onChange, onValidate }: Step3P
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {termsConditions.length < 1 && (
-            <div className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg">
-              <AlertTriangle className="w-5 h-5" />
-              <span className="text-sm font-medium">
-                At least one term or condition is required to continue
-              </span>
-            </div>
-          )}
 
           {/* Owner Presence Quick Add */}
           <div className="border rounded-lg p-4 bg-green-50">
@@ -602,7 +595,7 @@ export default function Step3ExtraOptions({ data, onChange, onValidate }: Step3P
               <div>
                 <h4 className="font-medium mb-3">Terms & Conditions ({termsConditions.length})</h4>
                 {termsConditions.length === 0 ? (
-                  <p className="text-sm text-red-500">⚠️ At least one term required</p>
+                  <p className="text-sm text-gray-500">No terms added</p>
                 ) : (
                   <div className="space-y-2">
                     {termsConditions.map((term) => (

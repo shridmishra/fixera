@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Upload, X, MapPin, FileText, Star } from "lucide-react"
+import { Upload, X, MapPin, FileText, Star, Users } from "lucide-react"
 import { toast } from 'sonner'
 
 interface ProjectData {
@@ -63,13 +63,16 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
   const [categories, setCategories] = useState<string[]>([])
   const [services, setServices] = useState<string[]>([])
   const [areasOfWork, setAreasOfWork] = useState<string[]>([])
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
   const [loadingCategories, setLoadingCategories] = useState(false)
   const [loadingServices, setLoadingServices] = useState(false)
   const [loadingAreas, setLoadingAreas] = useState(false)
+  const [loadingTeamMembers, setLoadingTeamMembers] = useState(false)
 
-  // Fetch categories on mount
+  // Fetch categories and team members on mount
   useEffect(() => {
     fetchCategories()
+    fetchTeamMembers()
   }, [])
 
   // Fetch services when category changes
@@ -169,6 +172,23 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
       }
     } catch (error) {
       console.error('Failed to fetch service configuration ID:', error)
+    }
+  }
+
+  const fetchTeamMembers = async () => {
+    setLoadingTeamMembers(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/team/members`, {
+        credentials: 'include'
+      })
+      if (response.ok) {
+        const result = await response.json()
+        setTeamMembers(result.data?.teamMembers || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch team members:', error)
+    } finally {
+      setLoadingTeamMembers(false)
     }
   }
 
@@ -295,6 +315,15 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
   const useGeneratedTitle = () => {
     updateFormData({ title: suggestedTitle })
     setSuggestedTitle('')
+  }
+
+  const toggleTeamMember = (memberId: string) => {
+    const currentResources = formData.resources || []
+    if (currentResources.includes(memberId)) {
+      updateFormData({ resources: currentResources.filter(id => id !== memberId) })
+    } else {
+      updateFormData({ resources: [...currentResources, memberId] })
+    }
   }
 
   const handleImageUpload = (files: FileList | null) => {
@@ -480,6 +509,67 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
           </div>
         </CardContent>
       </Card>
+
+      {/* Team Members - Only show for Renovation category */}
+      {formData.category?.toLowerCase() === 'renovation' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Users className="w-5 h-5" />
+              <span>Assign Team Members</span>
+            </CardTitle>
+            <CardDescription>
+              Select team members who will work on this renovation project
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingTeamMembers ? (
+              <p className="text-gray-500">Loading team members...</p>
+            ) : teamMembers.length === 0 ? (
+              <div className="text-center py-6 border-2 border-dashed border-gray-300 rounded-lg">
+                <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-600 font-medium">No team members available</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  You haven&apos;t invited any team members yet. Go to Team Management to invite team members.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600 mb-3">
+                  {formData.resources?.length || 0} team member(s) selected
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {teamMembers.map((member) => (
+                    <div
+                      key={member._id}
+                      className={`flex items-center space-x-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                        formData.resources?.includes(member._id)
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => toggleTeamMember(member._id)}
+                    >
+                      <Checkbox
+                        checked={formData.resources?.includes(member._id) || false}
+                        onCheckedChange={() => toggleTeamMember(member._id)}
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">{member.name}</p>
+                        {member.hasEmail && member.email && (
+                          <p className="text-sm text-gray-500">{member.email}</p>
+                        )}
+                        {!member.hasEmail && (
+                          <Badge variant="secondary" className="text-xs mt-1">Managed by Company</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Description & Pricing */}
       <Card>
