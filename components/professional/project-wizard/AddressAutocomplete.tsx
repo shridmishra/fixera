@@ -27,6 +27,7 @@ export default function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const [validating, setValidating] = useState(false);
   const [isValid, setIsValid] = useState<boolean | null>(null);
+  const [selectedFromDropdown, setSelectedFromDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const { isLoaded, validateAddress } = useGoogleMaps();
@@ -42,7 +43,9 @@ export default function AddressAutocomplete({
     autocompleteRef.current.addListener('place_changed', () => {
       const place = autocompleteRef.current?.getPlace();
       if (place?.formatted_address) {
+        console.log('✅ Address selected from dropdown:', place.formatted_address);
         onChange(place.formatted_address);
+        setSelectedFromDropdown(true);
         setIsValid(true);
         onValidation(true);
       }
@@ -59,14 +62,26 @@ export default function AddressAutocomplete({
   const handleBlur = async () => {
     const addressToValidate = useCompanyAddress ? companyAddress : value;
 
+    console.log('🔍 handleBlur called:', { addressToValidate, selectedFromDropdown, isValid });
+
     if (!addressToValidate) {
+      console.log('❌ Empty address');
       setIsValid(false);
       onValidation(false);
       return;
     }
 
+    // If user selected from dropdown, it's already validated - don't revalidate
+    if (selectedFromDropdown && isValid === true) {
+      console.log('✅ Skipping validation - already validated from dropdown');
+      return;
+    }
+
+    // Otherwise validate the typed address using Google Maps API
+    console.log('🌐 Validating address via API...');
     setValidating(true);
     const valid = await validateAddress(addressToValidate);
+    console.log('📍 Validation result:', valid);
     setIsValid(valid);
     onValidation(valid);
     setValidating(false);
@@ -75,9 +90,19 @@ export default function AddressAutocomplete({
   // Validate company address when it changes
   useEffect(() => {
     if (useCompanyAddress && companyAddress) {
-      handleBlur();
+      validateCompanyAddress();
     }
   }, [useCompanyAddress, companyAddress]);
+
+  const validateCompanyAddress = async () => {
+    if (!companyAddress) return;
+
+    setValidating(true);
+    const valid = await validateAddress(companyAddress);
+    setIsValid(valid);
+    onValidation(valid);
+    setValidating(false);
+  };
 
   const effectiveValue = useCompanyAddress ? companyAddress || '' : value;
 
@@ -94,6 +119,7 @@ export default function AddressAutocomplete({
           onChange={(e) => {
             if (!useCompanyAddress) {
               onChange(e.target.value);
+              setSelectedFromDropdown(false);
               setIsValid(null);
             }
           }}
