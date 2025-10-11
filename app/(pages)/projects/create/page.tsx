@@ -107,6 +107,14 @@ interface ProjectData {
     noBorders: boolean
   }
   resources?: string[]
+  intakeMeeting?: {
+    enabled: boolean
+    resources: string[]
+  }
+  renovationPlanning?: {
+    fixeraManaged: boolean
+    resources: string[]
+  }
   projectType?: string[]
   description?: string
   priceModel?: string
@@ -182,6 +190,8 @@ export default function ProjectCreatePage() {
               category: project.category,
               service: project.service,
               areaOfWork: project.areaOfWork,
+              intakeMeeting: project.intakeMeeting || { enabled: false, resources: [] },
+              renovationPlanning: project.renovationPlanning || { fixeraManaged: false, resources: [] },
               distance: project.distance || {
                 address: '',
                 useCompanyAddress: false,

@@ -28,6 +28,9 @@ interface IIncludedItem {
   isCustom: boolean
   hasServiceDetails?: boolean
   serviceDetails?: IProfessionalInput[]
+  // NEW: mark included items that originate from professional input fields
+  isDynamicField?: boolean
+  fieldName?: string
 }
 
 interface IProfessionalInput {
@@ -257,12 +260,13 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
     ))
   }
 
-  const addIncludedItem = (subprojectId: string, itemName: string, isCustom: boolean = false) => {
+  const addIncludedItem = (subprojectId: string, itemName: string, isCustom: boolean = false, extra?: Partial<IIncludedItem>) => {
     const newItem: IIncludedItem = {
       name: itemName,
       isCustom,
       hasServiceDetails: itemName === 'Service Details',
-      serviceDetails: itemName === 'Service Details' ? [] : undefined
+      serviceDetails: itemName === 'Service Details' ? [] : undefined,
+      ...(extra || {})
     }
 
     updateSubproject(subprojectId, {
@@ -282,10 +286,43 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
     }
   }
 
+  // NEW: remove included item by dynamic fieldName
+  const removeIncludedDynamicField = (subprojectId: string, fieldName: string) => {
+    const subproject = subprojects.find(s => s.id === subprojectId)
+    if (!subproject) return
+    updateSubproject(subprojectId, {
+      included: subproject.included.filter(i => !(i.isDynamicField && i.fieldName === fieldName))
+    })
+  }
+
+  // NEW: helper to remove a professional input when unselecting a dynamic field
+  const removeProfessionalInput = (subprojectId: string, fieldName: string) => {
+    const subproject = subprojects.find(s => s.id === subprojectId)
+    if (!subproject) return
+    const existingInputs = subproject.professionalInputs || []
+    const updatedInputs = existingInputs.filter(i => i.fieldName !== fieldName)
+    updateSubproject(subprojectId, { professionalInputs: updatedInputs })
+  }
+
+  // NEW: check whether a dynamic field is included
+  const isDynamicFieldIncluded = (subproject: ISubproject, fieldName: string) => {
+    return (subproject.included || []).some(i => i.isDynamicField && i.fieldName === fieldName)
+  }
+
+  // NEW: toggle a dynamic field in included
+  const toggleIncludedDynamicField = (subprojectId: string, field: IDynamicField, checked: boolean) => {
+    if (checked) {
+      addIncludedItem(subprojectId, field.label, false, { isDynamicField: true, fieldName: field.fieldName })
+    } else {
+      removeIncludedDynamicField(subprojectId, field.fieldName)
+      removeProfessionalInput(subprojectId, field.fieldName)
+    }
+  }
+
   const getPredefinedItems = () => {
     const service = data.service || 'default'
     return PREDEFINED_INCLUDED_ITEMS[service as keyof typeof PREDEFINED_INCLUDED_ITEMS] ||
-           PREDEFINED_INCLUDED_ITEMS.default
+      PREDEFINED_INCLUDED_ITEMS.default
   }
 
   const addMaterial = (subprojectId: string, material: IMaterial) => {
@@ -511,133 +548,7 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                   </div>
                 )}
 
-                {/* NEW: Dynamic Professional Input Fields */}
-                {dynamicFields.length > 0 && (
-                  <div className="border rounded-lg p-4 bg-purple-50">
-                    <h4 className="font-semibold mb-3">Professional Input Fields</h4>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Fill in the technical specifications for this service package
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {dynamicFields.map((field) => {
-                        const currentValue = subproject.professionalInputs?.find(
-                          (input) => input.fieldName === field.fieldName
-                        )?.value
-
-                        return (
-                          <div key={field.fieldName}>
-                            <Label htmlFor={`${subproject.id}-${field.fieldName}`}>
-                              {field.label} {field.isRequired && '*'}
-                              {field.unit && <span className="text-gray-500 text-xs ml-1">({field.unit})</span>}
-                            </Label>
-
-                            {/* Dropdown Field */}
-                            {field.fieldType === 'dropdown' && (
-                              <Select
-                                value={currentValue as string || ''}
-                                onValueChange={(value) =>
-                                  updateProfessionalInput(subproject.id, field.fieldName, value)
-                                }
-                              >
-                                <SelectTrigger id={`${subproject.id}-${field.fieldName}`}>
-                                  <SelectValue placeholder={field.placeholder || `Select ${field.label}`} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {field.options?.filter(option => option && option.trim()).map((option) => (
-                                    <SelectItem key={option} value={option}>
-                                      {option}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-
-                            {/* Range Field (Min/Max) */}
-                            {field.fieldType === 'range' && (
-                              <div className="flex space-x-2">
-                                <Input
-                                  type="number"
-                                  min={field.min}
-                                  max={field.max}
-                                  value={
-                                    typeof currentValue === 'object' && currentValue !== null
-                                      ? (currentValue as { min: number; max: number }).min
-                                      : ''
-                                  }
-                                  onChange={(e) => {
-                                    const newValue = {
-                                      min: parseFloat(e.target.value) || field.min || 0,
-                                      max:
-                                        typeof currentValue === 'object' && currentValue !== null
-                                          ? (currentValue as { min: number; max: number }).max
-                                          : field.max || 0
-                                    }
-                                    updateProfessionalInput(subproject.id, field.fieldName, newValue)
-                                  }}
-                                  placeholder="Min"
-                                />
-                                <span className="self-center text-gray-500">to</span>
-                                <Input
-                                  type="number"
-                                  min={field.min}
-                                  max={field.max}
-                                  value={
-                                    typeof currentValue === 'object' && currentValue !== null
-                                      ? (currentValue as { min: number; max: number }).max
-                                      : ''
-                                  }
-                                  onChange={(e) => {
-                                    const newValue = {
-                                      min:
-                                        typeof currentValue === 'object' && currentValue !== null
-                                          ? (currentValue as { min: number; max: number }).min
-                                          : field.min || 0,
-                                      max: parseFloat(e.target.value) || field.max || 0
-                                    }
-                                    updateProfessionalInput(subproject.id, field.fieldName, newValue)
-                                  }}
-                                  placeholder="Max"
-                                />
-                              </div>
-                            )}
-
-                            {/* Number Field */}
-                            {field.fieldType === 'number' && (
-                              <Input
-                                id={`${subproject.id}-${field.fieldName}`}
-                                type="number"
-                                min={field.min}
-                                max={field.max}
-                                value={currentValue as number || ''}
-                                onChange={(e) =>
-                                  updateProfessionalInput(
-                                    subproject.id,
-                                    field.fieldName,
-                                    parseFloat(e.target.value) || 0
-                                  )
-                                }
-                                placeholder={field.placeholder || `Enter ${field.label}`}
-                              />
-                            )}
-
-                            {/* Text Field */}
-                            {field.fieldType === 'text' && (
-                              <Input
-                                id={`${subproject.id}-${field.fieldName}`}
-                                type="text"
-                                value={currentValue as string || ''}
-                                onChange={(e) =>
-                                  updateProfessionalInput(subproject.id, field.fieldName, e.target.value)
-                                }
-                                placeholder={field.placeholder || `Enter ${field.label}`}
-                              />
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                {/* MERGED: Dynamic Professional Input Fields now inside What's Included */}
 
                 {/* Pricing */}
                 <div className="border rounded-lg p-4 bg-blue-50">
@@ -811,8 +722,8 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                                     unit: unit || undefined,
                                     description: desc || undefined
                                   })
-                                  // Clear inputs
-                                  ;(e.target as HTMLInputElement).value = ''
+                                    // Clear inputs
+                                    ; (e.target as HTMLInputElement).value = ''
                                   if (document.getElementById(`material-qty-${subproject.id}`)) {
                                     (document.getElementById(`material-qty-${subproject.id}`) as HTMLInputElement).value = ''
                                   }
@@ -858,11 +769,11 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                                   unit: unit || undefined,
                                   description: desc || undefined
                                 })
-                                // Clear inputs
-                                ;(document.getElementById(`material-name-${subproject.id}`) as HTMLInputElement).value = ''
-                                ;(document.getElementById(`material-qty-${subproject.id}`) as HTMLInputElement).value = ''
-                                ;(document.getElementById(`material-unit-${subproject.id}`) as HTMLInputElement).value = ''
-                                ;(document.getElementById(`material-desc-${subproject.id}`) as HTMLInputElement).value = ''
+                                  // Clear inputs
+                                  ; (document.getElementById(`material-name-${subproject.id}`) as HTMLInputElement).value = ''
+                                  ; (document.getElementById(`material-qty-${subproject.id}`) as HTMLInputElement).value = ''
+                                  ; (document.getElementById(`material-unit-${subproject.id}`) as HTMLInputElement).value = ''
+                                  ; (document.getElementById(`material-desc-${subproject.id}`) as HTMLInputElement).value = ''
                               } else {
                                 toast.error('Material name is required')
                               }
@@ -910,6 +821,168 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                       </div>
                     )}
                   </div>
+
+                  {/* Dynamic Professional Input Fields (Selectable as Included) */}
+                  {dynamicFields.length > 0 && (
+                    <div className="border rounded-lg p-4 bg-purple-50 mt-4">
+                      <h4 className="font-semibold mb-3">Professional Input Fields</h4>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Select the fields to include and provide their values
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {dynamicFields.map((field) => {
+                          const selected = isDynamicFieldIncluded(subproject, field.fieldName)
+                          const currentValue = subproject.professionalInputs?.find(
+                            (input) => input.fieldName === field.fieldName
+                          )?.value
+                          const isDesignRevisions = (field.label || '').toLowerCase().includes('design revision') || (field.fieldName || '').toLowerCase().includes('design_revision') || (field.label || '').toLowerCase().includes('revisions') || (field.fieldName || '').toLowerCase().includes('revision')
+
+                          return (
+                            <div key={field.fieldName} className="border rounded p-3 bg-white">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <Checkbox
+                                  id={`inc-${subproject.id}-${field.fieldName}`}
+                                  checked={selected}
+                                  onCheckedChange={() =>
+                                    toggleIncludedDynamicField(subproject.id, field, !selected)
+                                  }
+                                />
+                                <Label htmlFor={`inc-${subproject.id}-${field.fieldName}`} className="text-sm font-medium">
+                                  {field.label}
+                                  {field.unit && <span className="text-gray-500 text-xs ml-1">({field.unit})</span>}
+                                </Label>
+                              </div>
+
+                              {selected && (
+                                <div className="mt-2">
+                                  {/* Dropdown Field */}
+                                  {field.fieldType === 'dropdown' && (
+                                    <Select
+                                      value={(currentValue as string) || ''}
+                                      onValueChange={(value) =>
+                                        updateProfessionalInput(subproject.id, field.fieldName, value)
+                                      }
+                                    >
+                                      <SelectTrigger id={`${subproject.id}-${field.fieldName}`}>
+                                        <SelectValue placeholder={field.placeholder || `Select ${field.label}`} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {field.options?.filter(option => option && option.trim()).map((option) => (
+                                          <SelectItem key={option} value={option}>
+                                            {option}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+
+                                  {/* Design Revisions forced to number */}
+                                  {isDesignRevisions && (
+                                    <Input
+                                      id={`${subproject.id}-${field.fieldName}`}
+                                      type="number"
+                                      min={field.min}
+                                      max={field.max}
+                                      value={(currentValue as number) || ''}
+                                      onChange={(e) =>
+                                        updateProfessionalInput(
+                                          subproject.id,
+                                          field.fieldName,
+                                          parseFloat(e.target.value) || 0
+                                        )
+                                      }
+                                      placeholder={field.placeholder || `Enter ${field.label}`}
+                                    />
+                                  )}
+
+                                  {/* Range Field (Min/Max) */}
+                                  {!isDesignRevisions && field.fieldType === 'range' && (
+                                    <div className="flex space-x-2">
+                                      <Input
+                                        type="number"
+                                        min={field.min}
+                                        max={field.max}
+                                        value={
+                                          typeof currentValue === 'object' && currentValue !== null
+                                            ? (currentValue as { min: number; max: number }).min
+                                            : ''
+                                        }
+                                        onChange={(e) => {
+                                          const newValue = {
+                                            min: parseFloat(e.target.value) || field.min || 0,
+                                            max:
+                                              typeof currentValue === 'object' && currentValue !== null
+                                                ? (currentValue as { min: number; max: number }).max
+                                                : field.max || 0
+                                          }
+                                          updateProfessionalInput(subproject.id, field.fieldName, newValue)
+                                        }}
+                                        placeholder="Min"
+                                      />
+                                      <span className="self-center text-gray-500">to</span>
+                                      <Input
+                                        type="number"
+                                        min={field.min}
+                                        max={field.max}
+                                        value={
+                                          typeof currentValue === 'object' && currentValue !== null
+                                            ? (currentValue as { min: number; max: number }).max
+                                            : ''
+                                        }
+                                        onChange={(e) => {
+                                          const newValue = {
+                                            min:
+                                              typeof currentValue === 'object' && currentValue !== null
+                                                ? (currentValue as { min: number; max: number }).min
+                                                : field.min || 0,
+                                            max: parseFloat(e.target.value) || field.max || 0
+                                          }
+                                          updateProfessionalInput(subproject.id, field.fieldName, newValue)
+                                        }}
+                                        placeholder="Max"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* Number Field (and default for design revisions handled above) */}
+                                  {!isDesignRevisions && field.fieldType === 'number' && (
+                                    <Input
+                                      id={`${subproject.id}-${field.fieldName}`}
+                                      type="number"
+                                      min={field.min}
+                                      max={field.max}
+                                      value={(currentValue as number) || ''}
+                                      onChange={(e) =>
+                                        updateProfessionalInput(
+                                          subproject.id,
+                                          field.fieldName,
+                                          parseFloat(e.target.value) || 0
+                                        )
+                                      }
+                                      placeholder={field.placeholder || `Enter ${field.label}`}
+                                    />
+                                  )}
+
+                                  {/* Text Field */}
+                                  {field.fieldType === 'text' && (
+                                    <Input
+                                      id={`${subproject.id}-${field.fieldName}`}
+                                      type="text"
+                                      value={(currentValue as string) || ''}
+                                      onChange={(e) =>
+                                        updateProfessionalInput(subproject.id, field.fieldName, e.target.value)
+                                      }
+                                      placeholder={field.placeholder || `Enter ${field.label}`}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Predefined Items */}
                   <div className="mb-4">
