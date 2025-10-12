@@ -235,8 +235,24 @@ export default function ProjectCreatePage() {
   // Manual save function for draft
   const saveProjectDraft = async () => {
     try {
+      // Ensure priceModel is always provided for backend requirements
+      const computedPriceModel = (() => {
+        const pm = (projectData.priceModel || '').trim()
+        if (pm) return pm
+        const isRenovation = (projectData.category || '').toLowerCase() === 'renovation'
+        if (isRenovation) return 'rfq'
+        // Derive from subprojects if available
+        const subs = projectData.subprojects || []
+        if (subs.length > 0) {
+          if (subs.some(s => s.pricing?.type === 'rfq')) return 'rfq'
+          return 'fixed'
+        }
+        return 'fixed'
+      })()
+
       const dataToSave = {
         ...projectData,
+        priceModel: computedPriceModel,
         currentStep
       }
 

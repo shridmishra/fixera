@@ -245,6 +245,14 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
     validateForm()
   }, [formData, serviceConfig])
 
+  // Ensure a priceModel is auto-selected for non-renovation when pricing models load
+  useEffect(() => {
+    const isRenovation = (formData.category || '').toLowerCase() === 'renovation'
+    if (!isRenovation && !formData.priceModel && pricingModels.length > 0) {
+      updateFormData({ priceModel: pricingModels[0] })
+    }
+  }, [pricingModels])
+
   const validateForm = () => {
     // Check if area of work is required and missing
     const isAreaOfWorkValid = !serviceConfig?.areaOfWorkRequired ||
@@ -554,7 +562,7 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
                     category: value,
                     service: '',
                     areaOfWork: '',
-                    priceModel: value.toLowerCase() === 'renovation' ? '' : (formData.priceModel || ''),
+                    priceModel: value.toLowerCase() === 'renovation' ? 'rfq' : (formData.priceModel || ''),
                     categories: [value],
                     services: []
                   })

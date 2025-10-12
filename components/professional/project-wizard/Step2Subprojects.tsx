@@ -536,11 +536,13 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                       <Label>Pricing Type *</Label>
                       <Select
                         value={subproject.pricing.type}
-                        onValueChange={(value: 'fixed' | 'unit' | 'rfq') =>
+                        onValueChange={(value: string) => {
+                          // If user chooses the service's price model label option, map to fixed
+                          const resolved: 'fixed' | 'unit' | 'rfq' = value === 'model' ? 'fixed' : (value as 'fixed' | 'unit' | 'rfq')
                           updateSubproject(subproject.id, {
-                            pricing: { ...subproject.pricing, type: value }
+                            pricing: { ...subproject.pricing, type: resolved }
                           })
-                        }
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
