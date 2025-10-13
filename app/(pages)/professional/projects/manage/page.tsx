@@ -1007,7 +1007,7 @@ export default function ManageProjectsPage() {
                 <CardContent className="pt-6 text-center">
                   <Pause className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No projects on hold</h3>
-                  <p className="text-gray-600">Projects you've put on hold will appear here</p>
+                  <p className="text-gray-600">Projects you&apos;ve put on hold will appear here</p>
                 </CardContent>
               </Card>
             ) : (
@@ -1053,7 +1053,7 @@ export default function ManageProjectsPage() {
                 <CardContent className="pt-6 text-center">
                   <CheckCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No completed projects</h3>
-                  <p className="text-gray-600">Projects you've completed will appear here</p>
+                  <p className="text-gray-600">Projects you&apos;ve completed will appear here</p>
                 </CardContent>
               </Card>
             ) : (
@@ -1160,7 +1160,7 @@ export default function ManageProjectsPage() {
             <DialogHeader>
               <DialogTitle>Duplicate Project</DialogTitle>
               <DialogDescription>
-                Are you sure you want to duplicate "{selectedProject?.title}"? This will create a new draft copy of the project that you can edit.
+                Are you sure you want to duplicate &quot;{selectedProject?.title}&quot;? This will create a new draft copy of the project that you can edit.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -1182,7 +1182,7 @@ export default function ManageProjectsPage() {
             <DialogHeader>
               <DialogTitle>Delete Project</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete "{selectedProject?.title}"? This action cannot be undone and all project data will be permanently removed.
+                Are you sure you want to delete &quot;{selectedProject?.title}&quot;? This action cannot be undone and all project data will be permanently removed.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -1208,8 +1208,8 @@ export default function ManageProjectsPage() {
               </DialogTitle>
               <DialogDescription>
                 {selectedProject?.status === 'published'
-                  ? `Are you sure you want to put "${selectedProject?.title}" on hold? It will no longer be visible to customers.`
-                  : `Are you sure you want to resume publishing "${selectedProject?.title}"? It will become visible to customers again.`
+                  ? `Are you sure you want to put &quot;${selectedProject?.title}&quot; on hold? It will no longer be visible to customers.`
+                  : `Are you sure you want to resume publishing &quot;${selectedProject?.title}&quot;? It will become visible to customers again.`
                 }
               </DialogDescription>
             </DialogHeader>
