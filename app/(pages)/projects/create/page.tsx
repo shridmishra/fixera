@@ -84,6 +84,7 @@ interface IRFQQuestion {
   type: 'text' | 'multiple_choice' | 'attachment'
   options?: string[]
   isRequired: boolean
+  professionalAttachments?: string[]
 }
 
 interface IPostBookingQuestion {
@@ -92,6 +93,7 @@ interface IPostBookingQuestion {
   type: 'text' | 'multiple_choice' | 'attachment'
   options?: string[]
   isRequired: boolean
+  professionalAttachments?: string[]
 }
 
 interface ProjectData {

@@ -269,10 +269,9 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
     const hasExecutionResources = Array.isArray(formData.resources) && formData.resources.length > 0
     const hasIntakeResources = Array.isArray(formData.intakeMeeting?.resources) && (formData.intakeMeeting?.resources.length || 0) > 0
     const planningEnabled = !!formData.renovationPlanning?.fixeraManaged
-    const hasPlanningExecResources = Array.isArray(formData.renovationPlanning?.resources) && (formData.renovationPlanning?.resources.length || 0) > 0
 
     const isResourcesValid = isRenovation
-      ? (hasIntakeResources && (!planningEnabled || (hasPlanningExecResources && hasExecutionResources)))
+      ? (hasIntakeResources && hasExecutionResources)
       : hasExecutionResources
 
     const isValid = !!(
@@ -318,15 +317,9 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
       if (!hasIntake) {
         errors.push('At least one intake meeting resource is required for Renovation')
       }
-      if (formData.renovationPlanning?.fixeraManaged) {
-        const hasPlanningExec = Array.isArray(formData.renovationPlanning?.resources) && (formData.renovationPlanning?.resources.length || 0) > 0
-        const hasExecutionExec = Array.isArray(formData.resources) && (formData.resources.length || 0) > 0
-        if (!hasPlanningExec) {
-          errors.push('At least one planning resource is required when Renovation planning is enabled')
-        }
-        if (!hasExecutionExec) {
-          errors.push('At least one execution resource is required when Renovation planning is enabled')
-        }
+      const hasExecutionExec = Array.isArray(formData.resources) && (formData.resources.length || 0) > 0
+      if (!hasExecutionExec) {
+        errors.push('At least one execution resource is required for Renovation')
       }
     } else {
       const hasExec = Array.isArray(formData.resources) && (formData.resources.length || 0) > 0
@@ -872,7 +865,7 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
                 <div className="space-y-6">
                   {/* Planning Team Selection */}
                   <div className="space-y-3">
-                    <h4 className="font-medium text-gray-900">Planning Team</h4>
+                    <h4 className="font-medium text-gray-900">Planning Team (Optional)</h4>
                     <p className="text-sm text-gray-600 mb-1">
                       {(formData.renovationPlanning?.resources.length || 0)} team member(s) assigned to planning
                     </p>
