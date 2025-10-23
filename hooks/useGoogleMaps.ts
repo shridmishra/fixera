@@ -54,6 +54,7 @@ export const useGoogleMaps = (): GoogleMapsHook => {
     if (!address) return false;
 
     try {
+      console.log('🔍 Frontend: Sending validation request for:', address);
       const token = localStorage.getItem('token');
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/validate-address`,
@@ -68,9 +69,20 @@ export const useGoogleMaps = (): GoogleMapsHook => {
       );
 
       const data = await response.json();
+      console.log('📨 Frontend: Received validation response:', {
+        success: data.success,
+        isValid: data.isValid,
+        statusCode: response.status
+      });
+
+      if (!response.ok) {
+        console.error('❌ Frontend: Validation request failed:', response.status, data);
+        return false;
+      }
+
       return data.success && data.isValid;
     } catch (error) {
-      console.error('Address validation error:', error);
+      console.error('❌ Frontend: Address validation error:', error);
       return false;
     }
   };
