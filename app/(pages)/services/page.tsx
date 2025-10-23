@@ -1,13 +1,30 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowRight, Star, Shield } from 'lucide-react';
-import { iconMap, services as allServicesData, categories } from '@/data/content';
+import { ArrowRight, Star, Shield, Loader2, AlertCircle } from 'lucide-react';
+import { iconMap } from '@/data/content';
+import { toast } from 'sonner';
+
+interface Service {
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  countries: string[];
+}
+
+interface ServiceCategory {
+  name: string;
+  slug: string;
+  description?: string;
+  icon?: string;
+  services: Service[];
+}
 
 // Helper Icon Component
 const Icon = ({ name, className }: { name: string; className?: string }) => {
@@ -16,42 +33,33 @@ const Icon = ({ name, className }: { name: string; className?: string }) => {
 };
 
 // Reusable Service Card Component
-const ServiceCard = ({ service }: { service: (typeof allServicesData)[0] }) => {
+const ServiceCard = ({ service, categoryName, categoryIcon }: { service: Service; categoryName: string; categoryIcon?: string }) => {
   return (
     <Card className="group overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border-gray-200 flex flex-col">
-        <div className="relative h-48 bg-gray-100 flex items-center justify-center">
-            <Icon name={service.icon || 'Wrench'} className="w-12 h-12 text-gray-400" />
-            <div className="absolute top-2 right-2">
-                {service.popular && <Badge variant="destructive">Popular</Badge>}
-            </div>
+        <div className="relative h-48 bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+            <Icon name={categoryIcon || 'Wrench'} className="w-16 h-16 text-blue-400 opacity-50" />
         </div>
         <CardContent className="p-4 flex flex-col flex-grow">
-            <p className="text-sm text-gray-500">{service.category}</p>
+            <p className="text-sm text-gray-500 font-medium">{categoryName}</p>
             <h3 className="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition-colors mt-1">
                 {service.name}
             </h3>
-            <p className="text-sm text-gray-600 mt-2 flex-grow">
-                {service.description}
-            </p>
+            {service.description && (
+              <p className="text-sm text-gray-600 mt-2 flex-grow line-clamp-2">
+                  {service.description}
+              </p>
+            )}
             <div className="flex items-center gap-4 mt-4 text-sm text-gray-500">
                 <div className="flex items-center gap-1.5">
-                    <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                    <span className="font-medium text-gray-800">{service.avgRating}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
                     <Shield className="w-4 h-4 text-green-500" />
-                    <span className="text-gray-800">{service.professionals} pros</span>
+                    <span className="text-gray-700 font-medium">Verified Service</span>
                 </div>
             </div>
         </CardContent>
-        <div className="p-4 border-t flex items-center justify-between">
-            <div>
-                <span className="text-xs text-gray-500">STARTING AT</span>
-                <p className="text-xl font-bold text-gray-900">€{service.startingPrice}</p>
-            </div>
-            <Button asChild size="sm">
+        <div className="p-4 border-t">
+            <Button asChild size="sm" className="w-full">
                 <Link href={`/services/${service.slug}`}>
-                    View <ArrowRight className="w-4 h-4 ml-2" />
+                    View Details <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
             </Button>
         </div>
@@ -62,10 +70,94 @@ const ServiceCard = ({ service }: { service: (typeof allServicesData)[0] }) => {
 // The Main Page Component
 export default function ServicesHubPage() {
   const [activeCategory, setActiveCategory] = useState('all');
-  
-  const filteredServices = activeCategory === 'all'
-    ? allServicesData
-    : allServicesData.filter(service => service.category === activeCategory);
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchServiceCategories();
+  }, []);
+
+  const fetchServiceCategories = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/service-categories/active?country=BE`,
+        {
+          credentials: 'include',
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch service categories');
+      }
+
+      const data: ServiceCategory[] = await response.json();
+      setCategories(data);
+    } catch (error) {
+      console.error('Error fetching service categories:', error);
+      setError('Unable to load services. Please try again later.');
+      toast.error('Failed to load services');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getFilteredData = () => {
+    if (activeCategory === 'all') {
+      // Return all services from all categories
+      return categories.flatMap(cat =>
+        cat.services.map(service => ({
+          service,
+          categoryName: cat.name,
+          categoryIcon: cat.icon
+        }))
+      );
+    }
+
+    // Filter to specific category
+    const selectedCategory = categories.find(cat => cat.slug === activeCategory);
+    if (!selectedCategory) return [];
+
+    return selectedCategory.services.map(service => ({
+      service,
+      categoryName: selectedCategory.name,
+      categoryIcon: selectedCategory.icon
+    }));
+  };
+
+  const filteredData = getFilteredData();
+
+  if (isLoading) {
+    return (
+      <div className="bg-white min-h-screen">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-24">
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+            <p className="text-gray-600 text-lg">Loading services...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white min-h-screen">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-24">
+          <div className="flex flex-col items-center justify-center py-20">
+            <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Unable to Load Services</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <Button onClick={fetchServiceCategories}>
+              Try Again
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white">
@@ -80,22 +172,34 @@ export default function ServicesHubPage() {
         <Tabs defaultValue="all" onValueChange={setActiveCategory} className="w-full">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 h-auto">
             <TabsTrigger value="all">All Services</TabsTrigger>
-            {/* Using the flat categories from your data file */}
-            {categories.filter(c => c.id !== 'all').map(cat => (
-              <TabsTrigger key={cat.id} value={cat.id}>{cat.name}</TabsTrigger>
+            {categories.map(cat => (
+              <TabsTrigger key={cat.slug} value={cat.slug}>{cat.name}</TabsTrigger>
             ))}
           </TabsList>
 
           <TabsContent value={activeCategory}>
             <div className="mt-12">
               <h2 className="text-3xl font-bold text-gray-900 mb-6">
-                {categories.find(c => c.id === activeCategory)?.name || 'All Services'}
+                {activeCategory === 'all'
+                  ? 'All Services'
+                  : categories.find(c => c.slug === activeCategory)?.name || 'Services'}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                {filteredServices.map(service => (
-                  <ServiceCard key={service.id} service={service} />
-                ))}
-              </div>
+              {filteredData.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600">No services available in this category.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                  {filteredData.map((item, index) => (
+                    <ServiceCard
+                      key={`${item.categoryName}-${item.service.slug}-${index}`}
+                      service={item.service}
+                      categoryName={item.categoryName}
+                      categoryIcon={item.categoryIcon}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>

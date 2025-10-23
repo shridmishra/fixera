@@ -131,7 +131,7 @@ export default function ProjectApprovalPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending_approval':
+      case 'pending':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending Review</Badge>
       case 'published':
         return <Badge variant="secondary" className="bg-green-100 text-green-800">Published</Badge>

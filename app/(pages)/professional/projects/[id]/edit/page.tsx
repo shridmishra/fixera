@@ -8,7 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, AlertTriangle } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ArrowLeft, Save, AlertTriangle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 // -------------------------------------------
@@ -153,6 +161,8 @@ export default function ProjectEditPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [showWarningDialog, setShowWarningDialog] = useState(false);
+  const [hasShownWarning, setHasShownWarning] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -191,6 +201,18 @@ export default function ProjectEditPage() {
       fetchProject();
     }
   }, [user, params.id, fetchProject]);
+
+  // Show warning dialog when editing published or on_hold projects
+  useEffect(() => {
+    if (
+      project &&
+      !hasShownWarning &&
+      (project.status === 'published' || project.status === 'on_hold')
+    ) {
+      setShowWarningDialog(true);
+      setHasShownWarning(true);
+    }
+  }, [project, hasShownWarning]);
 
   const validateProject = (): string[] => {
     const errors: string[] = [];
@@ -334,6 +356,56 @@ export default function ProjectEditPage() {
 
   return (
     <div className='min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 md:p-4'>
+      {/* Warning Dialog for Published/On-Hold Projects */}
+      <Dialog open={showWarningDialog} onOpenChange={setShowWarningDialog}>
+        <DialogContent className='sm:max-w-[500px]'>
+          <DialogHeader>
+            <div className='flex items-center gap-3 mb-2'>
+              <div className='bg-amber-100 p-2 rounded-full'>
+                <AlertCircle className='h-6 w-6 text-amber-600' />
+              </div>
+              <DialogTitle className='text-xl'>Reapproval Required</DialogTitle>
+            </div>
+            <DialogDescription className='text-base pt-2 space-y-3'>
+              <p className='text-gray-700 font-medium'>
+                You are editing a {project?.status === 'published' ? 'published' : 'on-hold'} project.
+              </p>
+              <div className='bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2'>
+                <p className='text-sm text-gray-700'>
+                  <strong>Important:</strong> Editing this project will move it back to
+                  <span className='font-semibold'> pending</span> status.
+                </p>
+                <p className='text-sm text-gray-700'>
+                  All changes require admin reapproval and may take up to{' '}
+                  <strong className='text-amber-700'>48 hours</strong>.
+                </p>
+              </div>
+              <p className='text-sm text-gray-600'>
+                During this time, your project will not be visible to customers until it is
+                re-approved by our admin team.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className='gap-2 sm:gap-0'>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setShowWarningDialog(false);
+                router.push(`/professional/projects/${project?._id}`);
+              }}
+            >
+              Cancel & Go Back
+            </Button>
+            <Button
+              onClick={() => setShowWarningDialog(false)}
+              className='bg-amber-600 hover:bg-amber-700'
+            >
+              I Understand, Continue Editing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className='max-w-4xl mx-auto pt-16 md:pt-20'>
         {/* Header */}
         <div className='flex items-center justify-between mb-6'>

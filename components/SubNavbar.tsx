@@ -1,17 +1,61 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-// This assumes your data is in '@/data/content' and has the subNavbarCategories export
-import { subNavbarCategories } from "@/data/content";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
+
+interface Service {
+  name: string;
+  slug: string;
+}
+
+interface Category {
+  name: string;
+  slug: string;
+  services: Service[];
+}
 
 const SubNavbar = () => {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/service-categories/active?country=BE`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="hidden lg:block bg-white border-b border-t border-gray-200 shadow-sm sticky top-16 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-center items-center h-12">
+            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="hidden lg:block bg-white border-b border-t border-gray-200 shadow-sm sticky top-16 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-12">
-          {subNavbarCategories.map((category) => (
+          {categories.map((category) => (
             <div
               key={category.name}
               className="group relative h-full flex items-center"
@@ -24,25 +68,19 @@ const SubNavbar = () => {
               </Link>
 
               {/* --- Dropdown Menu --- */}
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-0 w-96 bg-white rounded-b-lg shadow-2xl border-x border-b group-hover:opacity-100 hidden group-hover:block border-gray-200 opacity-0 z-50 transition-all duration-300 transform group-hover:translate-y-0 translate-y-2">
-                <div className="p-4">
-                  <ul className="space-y-1">
+              <div className="absolute top-full left-0 mt-0 w-72 bg-white rounded-b-lg shadow-2xl border-x border-b group-hover:opacity-100 hidden group-hover:block border-gray-200 opacity-0 z-50 transition-all duration-300 transform group-hover:translate-y-0 translate-y-2 max-h-96 overflow-y-auto">
+                <div className="py-4">
+                  <ul className="px-4 space-y-1">
                     {category.services.map((service) => (
-                      <li key={service.id}>
+                      <li key={service.slug}>
                         <Link
-                          href={`/services/${service.id}`}
+                          href={`/services/${service.slug}`}
                           className="block text-gray-700 hover:text-blue-600 hover:bg-gray-50 p-2.5 rounded-md transition-colors"
                         >
                           {service.name}
                         </Link>
                       </li>
                     ))}
-                    <Link
-                      href={`/category/${category.slug}`}
-                      className=" flex items-center hover:text-blue-600 justify-center text-blue-400"
-                    >
-                      See more <ArrowRight className="w-4 h-4 ml-2 mt-1" />
-                    </Link>
                   </ul>
                 </div>
               </div>
