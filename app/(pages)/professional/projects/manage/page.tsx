@@ -42,7 +42,8 @@ interface Project {
   _id: string
   title: string
   description: string
-  status: 'draft' | 'pending_approval' | 'published' | 'rejected' | 'booked' | 'on_hold' | 'completed' | 'cancelled'
+  status: 'draft' | 'pending' | 'pending_approval' | 'published' | 'rejected' | 'on_hold' | 'booked' | 'completed' | 'cancelled'
+  bookingStatus?: 'rfq' | 'quoted' | 'booked' | 'execution' | 'completed' | 'cancelled' | 'dispute' | 'warranty'
   category: string
   subprojects: Array<{
     name: string
@@ -87,10 +88,10 @@ export default function ManageProjectsPage() {
     drafts: 0,
     pending: 0,
     published: 0,
-    booked: 0,
     on_hold: 0,
-    completed: 0,
     rejected: 0,
+    booked: 0,
+    completed: 0,
     cancelled: 0
   })
 
@@ -175,10 +176,10 @@ export default function ManageProjectsPage() {
               drafts: responseData.counts.drafts || 0,
               pending: responseData.counts.pending || 0,
               published: responseData.counts.published || 0,
-              booked: responseData.counts.booked || 0,
               on_hold: responseData.counts.on_hold || 0,
-              completed: responseData.counts.completed || 0,
               rejected: responseData.counts.rejected || 0,
+              booked: responseData.counts.booked || 0,
+              completed: responseData.counts.completed || 0,
               cancelled: responseData.counts.cancelled || 0
             })
           }
@@ -229,20 +230,38 @@ export default function ManageProjectsPage() {
     switch (status) {
       case 'draft':
         return 'bg-gray-100 text-gray-800 border-gray-300'
-      case 'pending_approval':
+      case 'pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-300'
       case 'published':
         return 'bg-green-100 text-green-800 border-green-300'
       case 'rejected':
         return 'bg-red-100 text-red-800 border-red-300'
-      case 'booked':
-        return 'bg-blue-100 text-blue-800 border-blue-300'
       case 'on_hold':
         return 'bg-orange-100 text-orange-800 border-orange-300'
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-300'
+    }
+  }
+
+  const getBookingStatusColor = (bookingStatus: string | undefined) => {
+    if (!bookingStatus) return ''
+    switch (bookingStatus) {
+      case 'rfq':
+        return 'bg-purple-100 text-purple-800 border-purple-300'
+      case 'quoted':
+        return 'bg-indigo-100 text-indigo-800 border-indigo-300'
+      case 'booked':
+        return 'bg-blue-100 text-blue-800 border-blue-300'
+      case 'execution':
+        return 'bg-cyan-100 text-cyan-800 border-cyan-300'
       case 'completed':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300'
       case 'cancelled':
         return 'bg-slate-100 text-slate-800 border-slate-300'
+      case 'dispute':
+        return 'bg-red-100 text-red-800 border-red-300'
+      case 'warranty':
+        return 'bg-teal-100 text-teal-800 border-teal-300'
       default:
         return 'bg-gray-100 text-gray-800 border-gray-300'
     }
@@ -742,7 +761,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -751,7 +770,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
@@ -801,7 +820,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -810,7 +829,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
@@ -847,7 +866,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -856,7 +875,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
@@ -893,7 +912,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -902,7 +921,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
@@ -939,7 +958,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow border-red-200 flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -948,7 +967,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
@@ -992,7 +1011,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow border-blue-200 flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -1001,7 +1020,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
@@ -1038,7 +1057,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow border-orange-200 flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -1047,7 +1066,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
@@ -1084,7 +1103,7 @@ export default function ManageProjectsPage() {
                   <Card key={project._id} className="hover:shadow-md transition-shadow border-emerald-200 flex flex-col h-full w-full overflow-hidden">
                     <CardHeader className="pb-3 px-3 md:px-6">
                       <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-words">{project.title}</CardTitle>
+                        <CardTitle className="text-sm md:text-lg leading-tight line-clamp-2 min-w-0 flex-1 break-all">{project.title}</CardTitle>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className={`${getStatusColor(project.status)} border text-xs`}>
                             {getStatusIcon(project.status)}
@@ -1093,7 +1112,7 @@ export default function ManageProjectsPage() {
                           <ProjectActionMenu project={project} />
                         </div>
                       </div>
-                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-words">
+                      <CardDescription className="line-clamp-3 text-xs md:text-sm break-all">
                         {project.description}
                       </CardDescription>
                     </CardHeader>
