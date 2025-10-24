@@ -52,6 +52,27 @@ interface User {
     endDate: string;
     reason?: string;
   }[]
+  // Company availability
+  companyAvailability?: {
+    monday?: { available: boolean; startTime?: string; endTime?: string }
+    tuesday?: { available: boolean; startTime?: string; endTime?: string }
+    wednesday?: { available: boolean; startTime?: string; endTime?: string }
+    thursday?: { available: boolean; startTime?: string; endTime?: string }
+    friday?: { available: boolean; startTime?: string; endTime?: string }
+    saturday?: { available: boolean; startTime?: string; endTime?: string }
+    sunday?: { available: boolean; startTime?: string; endTime?: string }
+  }
+  companyBlockedDates?: {
+    date: string;
+    reason?: string;
+    isHoliday?: boolean;
+  }[]
+  companyBlockedRanges?: {
+    startDate: string;
+    endDate: string;
+    reason?: string;
+    isHoliday?: boolean;
+  }[]
   profileCompletedAt?: string
   createdAt: string
   updatedAt: string
@@ -162,7 +183,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/me`, {
         credentials: 'include',
       })
-      
       if (response.ok) {
         const data = await response.json()
         setUser(data.user)

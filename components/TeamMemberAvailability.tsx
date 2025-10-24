@@ -8,13 +8,16 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { 
-  Calendar, 
+import { Input } from "@/components/ui/input"
+import {
+  Calendar,
   Building,
   User,
   Loader2,
   Save,
-  RefreshCw
+  RefreshCw,
+  X,
+  Plus
 } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/AuthContext"
@@ -58,11 +61,52 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
     sunday: { available: false, startTime: '09:00', endTime: '17:00' }
   })
 
+  // Blocked dates and ranges states
+  const [blockedDates, setBlockedDates] = useState<{ date: string; reason?: string }[]>([])
+  const [blockedRanges, setBlockedRanges] = useState<{ startDate: string; endDate: string; reason?: string }[]>([])
+  const [newBlockedDate, setNewBlockedDate] = useState('')
+  const [newBlockedDateReason, setNewBlockedDateReason] = useState('')
+  const [newRangeStart, setNewRangeStart] = useState('')
+  const [newRangeEnd, setNewRangeEnd] = useState('')
+  const [newRangeReason, setNewRangeReason] = useState('')
+
   // Fetch effective availability
   const fetchAvailability = async () => {
     try {
       setLoading(true)
-      
+
+      // Fetch user data to get blocked dates and ranges
+      const userResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/me`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+
+      if (userResponse.ok) {
+        const userData = await userResponse.json()
+        if (userData.success && userData.user) {
+          // Load blocked dates and ranges
+          if (userData.user.blockedDates) {
+            setBlockedDates(userData.user.blockedDates.map((item: { date: string; reason?: string }) => ({
+              date: new Date(item.date).toISOString().split('T')[0],
+              reason: item.reason
+            })))
+          }
+          if (userData.user.blockedRanges) {
+            setBlockedRanges(userData.user.blockedRanges.map((item: { startDate: string; endDate: string; reason?: string }) => ({
+              startDate: new Date(item.startDate).toISOString().split('T')[0],
+              endDate: new Date(item.endDate).toISOString().split('T')[0],
+              reason: item.reason
+            })))
+          }
+          if (userData.user.availability) {
+            setAvailability(userData.user.availability)
+          }
+        }
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/team/availability/effective`, {
         method: 'GET',
         headers: {
@@ -76,13 +120,8 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
         if (data.success) {
           setAvailabilityData(data.data)
           setAvailabilityPreference(data.data.availabilityPreference)
-          
-          // If personal, set the availability state
-          if (data.data.availabilityPreference === 'personal' && data.data.effectiveAvailability) {
-            setAvailability(data.data.effectiveAvailability)
-          }
-          
-          console.log('✅ Team member availability loaded')
+
+          console.log('✅ Availability loaded')
         } else {
           console.error('❌ Failed to load availability:', data.msg)
           toast.error(data.msg || 'Failed to load availability')
@@ -139,21 +178,25 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
   const savePersonalAvailability = async () => {
     try {
       setSaving(true)
-      
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/team/availability`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ availability })
+        body: JSON.stringify({
+          availability,
+          blockedDates,
+          blockedRanges
+        })
       })
 
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
-          toast.success('✅ Personal availability updated!')
-          
+          toast.success('✅ Availability updated successfully!')
+
           // Reload to get updated effective availability
           await fetchAvailability()
         } else {
@@ -186,25 +229,66 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
     }))
   }
 
+  // Add blocked date
+  const addBlockedDate = () => {
+    if (!newBlockedDate) {
+      toast.error('Please select a date')
+      return
+    }
+    setBlockedDates(prev => [...prev, { date: newBlockedDate, reason: newBlockedDateReason || undefined }])
+    setNewBlockedDate('')
+    setNewBlockedDateReason('')
+  }
+
+  // Remove blocked date
+  const removeBlockedDate = (index: number) => {
+    setBlockedDates(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Add blocked range
+  const addBlockedRange = () => {
+    if (!newRangeStart || !newRangeEnd) {
+      toast.error('Please select both start and end dates')
+      return
+    }
+    if (new Date(newRangeStart) > new Date(newRangeEnd)) {
+      toast.error('Start date must be before end date')
+      return
+    }
+    setBlockedRanges(prev => [...prev, {
+      startDate: newRangeStart,
+      endDate: newRangeEnd,
+      reason: newRangeReason || undefined
+    }])
+    setNewRangeStart('')
+    setNewRangeEnd('')
+    setNewRangeReason('')
+  }
+
+  // Remove blocked range
+  const removeBlockedRange = (index: number) => {
+    setBlockedRanges(prev => prev.filter((_, i) => i !== index))
+  }
+
   // Load availability on mount
   useEffect(() => {
     fetchAvailability()
   }, [])
 
-  // Check if user is a team member
+  // Check if user is a professional
   if (user?.role !== 'professional') {
     return (
       <Card className={className}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Team Member Availability
+            Availability Management
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
             <User className="h-12 w-12 mx-auto mb-2" />
-            <p className="text-sm">This feature is only available for team members</p>
+            <p className="text-sm">This feature is only available for team members and professionals</p>
           </div>
         </CardContent>
       </Card>
@@ -393,7 +477,7 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
                 {availabilityPreference === 'personal' ? 'Personal' : 'Company'}
               </Badge>
             </Label>
-            
+
             <div className="bg-muted/30 p-4 rounded-lg">
               <div className="space-y-2">
                 {availabilityData.effectiveAvailability ? (
@@ -421,6 +505,139 @@ export default function TeamMemberAvailability({ className }: TeamMemberAvailabi
             </div>
           </div>
         )}
+
+        <Separator />
+
+        {/* Blocked Dates Section */}
+        <div className="space-y-4">
+          <Label className="text-base font-medium">Blocked Dates</Label>
+          <p className="text-sm text-muted-foreground">Block specific dates when you&apos;re unavailable</p>
+
+          {/* Add new blocked date */}
+          <div className="flex gap-2">
+            <Input
+              type="date"
+              value={newBlockedDate}
+              onChange={(e) => setNewBlockedDate(e.target.value)}
+              className="flex-1"
+            />
+            <Input
+              type="text"
+              placeholder="Reason (optional)"
+              value={newBlockedDateReason}
+              onChange={(e) => setNewBlockedDateReason(e.target.value)}
+              className="flex-1"
+            />
+            <Button onClick={addBlockedDate} size="sm">
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          </div>
+
+          {/* List of blocked dates */}
+          {blockedDates.length > 0 && (
+            <div className="space-y-2">
+              {blockedDates.map((blocked, index) => (
+                <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <p className="font-medium text-sm">
+                      {new Date(blocked.date).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </p>
+                    {blocked.reason && (
+                      <p className="text-sm text-muted-foreground">{blocked.reason}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeBlockedDate(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Blocked Ranges Section */}
+        <div className="space-y-4">
+          <Label className="text-base font-medium">Blocked Date Ranges</Label>
+          <p className="text-sm text-muted-foreground">Block date ranges for vacations or extended time off</p>
+
+          {/* Add new blocked range */}
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Input
+                type="date"
+                value={newRangeStart}
+                onChange={(e) => setNewRangeStart(e.target.value)}
+                placeholder="Start date"
+                className="flex-1"
+              />
+              <Input
+                type="date"
+                value={newRangeEnd}
+                onChange={(e) => setNewRangeEnd(e.target.value)}
+                placeholder="End date"
+                className="flex-1"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="Reason (optional, e.g., 'Summer Vacation')"
+                value={newRangeReason}
+                onChange={(e) => setNewRangeReason(e.target.value)}
+                className="flex-1"
+              />
+              <Button onClick={addBlockedRange} size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Range
+              </Button>
+            </div>
+          </div>
+
+          {/* List of blocked ranges */}
+          {blockedRanges.length > 0 && (
+            <div className="space-y-2">
+              {blockedRanges.map((range, index) => (
+                <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <p className="font-medium text-sm">
+                      {new Date(range.startDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })} - {new Date(range.endDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </p>
+                    {range.reason && (
+                      <p className="text-sm text-muted-foreground">{range.reason}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeBlockedRange(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
