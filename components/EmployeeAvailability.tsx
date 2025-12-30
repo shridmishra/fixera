@@ -12,7 +12,6 @@ import { Calendar, User, Loader2, Save, RefreshCw, X, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/AuthContext"
 import AvailabilityCalendar from "@/components/calendar/AvailabilityCalendar"
-import WeeklyTimeBlocker from "@/components/calendar/WeeklyTimeBlocker"
 
 interface BlockedRange {
   startDate: string
@@ -268,22 +267,6 @@ export default function EmployeeAvailability({ className }: EmployeeAvailability
           />
         )}
 
-        <WeeklyTimeBlocker
-          blockedRanges={blockedRanges}
-          onAddBlockedRange={async (start, end, reason) => {
-            const startIso = new Date(start).toISOString()
-            const endIso = new Date(end).toISOString()
-            const updated = [...blockedRanges, { startDate: startIso, endDate: endIso, reason }]
-            setBlockedRanges(updated)
-            await saveBlockedDates(blockedDates, updated)
-          }}
-          onRemoveBlockedRange={async (index) => {
-            const updated = blockedRanges.filter((_, i) => i !== index)
-            setBlockedRanges(updated)
-            await saveBlockedDates(blockedDates, updated)
-          }}
-          description="Use this weekly planner to mark personal hours as unavailable."
-        />
         {/* Company Schedule Display */}
         {availabilityData && (
           <div className="space-y-3">

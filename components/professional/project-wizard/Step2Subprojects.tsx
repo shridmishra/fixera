@@ -61,8 +61,10 @@ interface ISubproject {
   included: IIncludedItem[]
   materialsIncluded: boolean
   materials?: IMaterial[]
-  deliveryPreparation: number
-  deliveryPreparationUnit?: 'hours' | 'days'
+  preparationDuration?: {
+    value: number
+    unit: 'hours' | 'days'
+  }
   executionDuration: {
     value: number
     unit: 'hours' | 'days'
@@ -138,12 +140,21 @@ const PREDEFINED_INCLUDED_ITEMS = {
 }
 
 export default function Step2Subprojects({ data, onChange, onValidate }: Step2Props) {
+  const normalizePreparationDuration = (subproject?: ISubproject) => {
+    const value =
+      typeof subproject?.preparationDuration?.value === 'number'
+        ? subproject.preparationDuration.value
+        : 1
+    const unit = (subproject?.preparationDuration?.unit || 'days') as 'hours' | 'days'
+    return { value, unit }
+  }
+
   const resolvePreparationUnit = (subproject?: ISubproject) =>
-    (subproject?.deliveryPreparationUnit || 'days') as 'hours' | 'days'
+    normalizePreparationDuration(subproject).unit
   const [subprojects, setSubprojects] = useState<ISubproject[]>(() =>
     (data.subprojects || []).map((sub) => ({
       ...sub,
-      deliveryPreparationUnit: sub.deliveryPreparationUnit || 'days'
+      preparationDuration: normalizePreparationDuration(sub)
     }))
   )
 
@@ -238,6 +249,8 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
       sub.pricing.type &&
       (sub.pricing.type === 'rfq' || sub.pricing.amount) &&
       sub.included.length >= 3 &&
+      sub.preparationDuration &&
+      typeof sub.preparationDuration.value === 'number' &&
       sub.executionDuration.value > 0 &&
       // Materials validation: if materialsIncluded is true, must have at least one material
       (!sub.materialsIncluded || (sub.materials && sub.materials.length > 0))
@@ -268,8 +281,7 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
       included: [],
       materialsIncluded: false,
       materials: [],
-      deliveryPreparation: 1,
-      deliveryPreparationUnit: 'days',
+      preparationDuration: { value: 1, unit: 'days' },
       executionDuration: {
         value: 1,
         unit: 'hours'
@@ -1146,11 +1158,14 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                           type="number"
                           min="0"
                           step="0.5"
-                          value={subproject.deliveryPreparation}
+                          value={subproject.preparationDuration?.value ?? 0}
                           onChange={(e) => {
                             const parsed = parseFloat(e.target.value)
                             updateSubproject(subproject.id, {
-                              deliveryPreparation: Number.isNaN(parsed) ? 0 : parsed
+                              preparationDuration: {
+                                value: Number.isNaN(parsed) ? 0 : parsed,
+                                unit: resolvePreparationUnit(subproject)
+                              }
                             })
                           }}
                         />
@@ -1158,7 +1173,10 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                           value={resolvePreparationUnit(subproject)}
                           onValueChange={(value: 'hours' | 'days') =>
                             updateSubproject(subproject.id, {
-                              deliveryPreparationUnit: value
+                              preparationDuration: {
+                                value: subproject.preparationDuration?.value ?? 0,
+                                unit: value
+                              }
                             })
                           }
                         >

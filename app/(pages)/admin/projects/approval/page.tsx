@@ -99,8 +99,6 @@ interface Subproject {
     amount?: number
   }
   preparationDuration?: { value?: number; unit?: string }
-  deliveryPreparation?: number
-  deliveryPreparationUnit?: 'hours' | 'days'
   executionDuration?: {
     value?: number
     unit?: string
@@ -772,11 +770,10 @@ export default function ProjectApprovalPage() {
                             )}
                             <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
                               {(() => {
-                                const preparationValue = sp.preparationDuration?.value ?? sp.deliveryPreparation;
+                                const preparationValue = sp.preparationDuration?.value;
                                 if (preparationValue == null) return null;
                                 const preparationUnit =
                                   sp.preparationDuration?.unit ??
-                                  sp.deliveryPreparationUnit ??
                                   sp.executionDuration?.unit ??
                                   'days';
                                 return (

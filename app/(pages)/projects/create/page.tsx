@@ -40,8 +40,6 @@ interface ISubproject {
     value: number
     unit: 'hours' | 'days'
   }
-  deliveryPreparation: number
-  deliveryPreparationUnit?: 'hours' | 'days'
   executionDuration: {
     value: number
     unit: 'hours' | 'days'
@@ -205,12 +203,10 @@ export default function ProjectCreatePage() {
   const normalizePreparationDuration = (subprojects?: ISubproject[]) => {
     if (!Array.isArray(subprojects)) return subprojects
     return subprojects.map((subproject) => {
-      const preparationValue =
-        subproject.preparationDuration?.value ?? subproject.deliveryPreparation
+      const preparationValue = subproject.preparationDuration?.value
       if (preparationValue == null) return subproject
       const preparationUnit =
         subproject.preparationDuration?.unit ??
-        subproject.deliveryPreparationUnit ??
         subproject.executionDuration?.unit ??
         'days'
       return {

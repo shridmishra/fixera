@@ -65,6 +65,7 @@ interface Props {
   onAddRange?: (s: string, e: string) => void;
   disabledPast?: boolean;
   compact?: boolean;
+  readOnly?: boolean;
 }
 
 const ymd = (d: Date) => format(d, 'yyyy-MM-dd');
@@ -88,10 +89,12 @@ export default function AvailabilityCalendar({
   onToggleDay,
   onAddRange,
   disabledPast = true,
+  readOnly = false,
 }: Props) {
   const [cur, setCur] = useState<Date>(startOfMonth(new Date()));
   const [rs, setRs] = useState<Date | null>(null);
   const today = startOfDay(new Date());
+  const canSelect = !readOnly && (onToggleDay || onAddRange);
 
   const pSet = useMemo(() => {
     const s = new Set<string>();
@@ -145,6 +148,7 @@ export default function AvailabilityCalendar({
   };
 
   const click = (d: Date) => {
+    if (!canSelect) return;
     if (disabledPast && isBefore(d, today)) return;
     if (isCompanyBlocked(d)) return;
     if (!rs) {
@@ -239,7 +243,7 @@ export default function AvailabilityCalendar({
             return (
               <button
                 key={k}
-                onClick={() => click(d)}
+                onClick={canSelect ? () => click(d) : undefined}
                 disabled={past || isCompanyBlocked(d)}
                 className={cn(
                   'relative',
@@ -319,10 +323,12 @@ export default function AvailabilityCalendar({
             chipClass='bg-slate-100 text-slate-700'
           />
         </div>
-        <div className='mt-2 text-[11px] text-muted-foreground'>
-          Tip: Click once to start a range, click another day to end it. Click
-          the same day twice to toggle a single-day block.
-        </div>
+        {canSelect && (
+          <div className='mt-2 text-[11px] text-muted-foreground'>
+            Tip: Click once to start a range, click another day to end it. Click
+            the same day twice to toggle a single-day block.
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -63,8 +63,6 @@ interface Subproject {
   included?: IncludedItem[];
   materialsIncluded?: boolean;
   preparationDuration?: { value: number; unit: 'hours' | 'days' };
-  deliveryPreparation?: number;
-  deliveryPreparationUnit?: 'hours' | 'days';
   executionDuration?: ExecutionDuration;
   buffer?: Buffer;
   intakeDuration?: IntakeDuration;
@@ -169,15 +167,13 @@ export default function ProjectEditPage() {
 
   const normalizePreparationDuration = (subprojects: Subproject[]) =>
     subprojects.map((subproject) => {
-      const preparationValue =
-        subproject.preparationDuration?.value ?? subproject.deliveryPreparation;
+      const preparationValue = subproject.preparationDuration?.value;
       if (preparationValue == null) {
         return subproject;
       }
 
       const preparationUnit =
         subproject.preparationDuration?.unit ??
-        subproject.deliveryPreparationUnit ??
         subproject.executionDuration?.unit ??
         'days';
 
@@ -966,8 +962,7 @@ export default function ProjectEditPage() {
                   pricing: { type: 'fixed', amount: 0 },
                   included: [],
                   materialsIncluded: false,
-                  deliveryPreparation: 0,
-                  deliveryPreparationUnit: 'days',
+                  preparationDuration: { value: 1, unit: 'days' },
                   executionDuration: { value: 1, unit: 'hours' },
                   warrantyPeriod: 0,
                 };

@@ -58,8 +58,10 @@ interface Project {
       priceRange?: { min: number; max: number };
       minProjectValue?: number;
     };
-    deliveryPreparation?: number;
-    deliveryPreparationUnit?: 'hours' | 'days';
+    preparationDuration?: {
+      value: number;
+      unit: 'hours' | 'days';
+    };
     executionDuration?: {
       value?: number;
       unit: 'hours' | 'days';
