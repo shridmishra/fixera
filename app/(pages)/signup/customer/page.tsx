@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { logError } from '@/lib/logger';
 import { useAuth } from '@/contexts/AuthContext';
 import DualVerificationComponent from '@/components/DualVerificationComponent';
 import {
@@ -244,7 +245,7 @@ export default function CustomerSignupPage() {
         // VAT validation is optional, so errors shouldn't block the user
       }
     } catch (error) {
-      console.error('VAT validation error:', error);
+      logError(error, 'VAT validation error', { component: 'CustomerSignup', action: 'validateVat' });
       setVatValidation({
         valid: false,
         error:

@@ -39,11 +39,9 @@ export function formatCurrencyRequired(
   value: number,
   options?: { locale?: string; currency?: string }
 ): string {
-  const locale = options?.locale ?? DEFAULT_LOCALE;
-  const currency = options?.currency ?? DEFAULT_CURRENCY;
-
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-  }).format(value);
+  const result = formatCurrency(value, options);
+  if (result === null) {
+    throw new Error('Unexpected null result for valid number');
+  }
+  return result;
 }

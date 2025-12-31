@@ -320,7 +320,8 @@ export default function ProjectCreatePage() {
 
       loadProject()
     }
-  }, [projectId, router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   // Manual save function for draft
   const saveProjectDraft = async (options?: { silent?: boolean }) => {
