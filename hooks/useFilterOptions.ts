@@ -9,6 +9,11 @@ export interface FilterOptions {
   categories: string[];
 }
 
+interface ServiceCategoryResponse {
+  name: string;
+  services: Array<{ name: string }>;
+}
+
 interface UseFilterOptionsParams {
   country?: string;
   enabled?: boolean;
@@ -50,12 +55,7 @@ export const useFilterOptions = ({
           throw new Error(`Failed to fetch filter options: ${response.status}`);
         }
 
-        const data = await response.json() as Array<{
-          name: string;
-          services: Array<{
-            name: string;
-          }>;
-        }>;
+        const data = await response.json() as ServiceCategoryResponse[];
 
         // Extract unique categories
         const categories = data.map(cat => cat.name);
@@ -69,8 +69,7 @@ export const useFilterOptions = ({
         });
         const services = Array.from(servicesSet).sort();
 
-        // For now, we'll use common values as fallback
-        // These could be fetched from a dedicated filter options endpoint
+        // Static defaults until a dedicated filter options endpoint is available
         const commonProjectTypes = [
           'Residential',
           'Commercial',

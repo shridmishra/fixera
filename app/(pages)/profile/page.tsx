@@ -11,7 +11,7 @@ import PasswordChange from "@/components/PasswordChange"
 import EmployeeAvailability from "@/components/EmployeeAvailability"
 import AvailabilityCalendar from "@/components/calendar/AvailabilityCalendar"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { addDays, format, parseISO } from "date-fns"
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz"
 import { toast } from "sonner"
@@ -30,6 +30,8 @@ import {
   getVATCountryName,
   formatVATNumber 
 } from "@/lib/vatValidation"
+
+const BOOKING_BLOCK_THRESHOLD_MINUTES = 240
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading, checkAuth } = useAuth()
@@ -102,6 +104,7 @@ export default function ProfilePage() {
     };
   } | null>(null)
   const [verificationSubmitting, setVerificationSubmitting] = useState(false)
+  const availabilityKey = useMemo(() => JSON.stringify(companyAvailability), [companyAvailability])
 
   // Calendar handlers (month view, two-click range, full-day blocks)
   const toggleBlockedDateFromCalendar = async (dateStr: string) => {
@@ -352,7 +355,7 @@ export default function ProfilePage() {
         })
 
         const blocked = Array.from(minutesByDay.entries())
-          .filter(([, minutes]) => minutes >= 240)
+          .filter(([, minutes]) => minutes >= BOOKING_BLOCK_THRESHOLD_MINUTES)
           .map(([date]) => ({ date, reason: 'Booking' }))
 
         setBookingBlockedDates(blocked)
@@ -362,7 +365,7 @@ export default function ProfilePage() {
     }
 
     fetchBookingBlocks()
-  }, [loading, isAuthenticated, user?.role, user?.businessInfo?.timezone, companyAvailability])
+  }, [loading, isAuthenticated, user?.role, user?.businessInfo?.timezone, availabilityKey])
 
   const handleVatNumberChange = (value: string) => {
     setVatNumber(value)

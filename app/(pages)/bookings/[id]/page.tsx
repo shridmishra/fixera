@@ -180,6 +180,7 @@ export default function BookingDetailPage() {
   const hasPostBookingQuestions = postBookingQuestions.length > 0
   const alreadyAnswered = (booking?.postBookingData?.length || 0) > 0
   const shouldShowPostBookingForm = showPostBookingQuestions && hasPostBookingQuestions && !alreadyAnswered && !answersSubmitted
+  const currencyRange = booking ? formatCurrencyRange(booking) : null
 
   const handleAnswerChange = (index: number, answer: string) => {
     setPostBookingAnswers(prev => ({ ...prev, [index]: answer }))
@@ -230,7 +231,7 @@ export default function BookingDetailPage() {
         toast.success("Thank you! Your answers have been submitted.")
         setAnswersSubmitted(true)
         // Update the local booking state
-        setBooking(prev => prev ? { ...prev, postBookingData: answers } : prev)
+        setBooking(prev => prev ? { ...prev, postBookingData: data.postBookingData || answers } : prev)
       } else {
         toast.error(data.msg || "Failed to submit answers. Please try again.")
       }
@@ -491,7 +492,7 @@ export default function BookingDetailPage() {
                       </span>
                     </div>
                   )}
-                  {formatCurrencyRange(booking) && (
+                  {currencyRange && (
                     <div className="flex items-center gap-2">
                       <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-semibold">
                         €
@@ -499,7 +500,7 @@ export default function BookingDetailPage() {
                       <span>
                         Budget:{" "}
                         <span className="font-medium">
-                          {formatCurrencyRange(booking)}
+                          {currencyRange}
                         </span>
                       </span>
                     </div>
