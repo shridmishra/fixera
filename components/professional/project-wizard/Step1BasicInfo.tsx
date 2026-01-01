@@ -34,9 +34,9 @@ interface ProjectData {
     useCompanyAddress: boolean
     maxKmRange: number
     noBorders: boolean
-    coordinates?: {
-      latitude: number
-      longitude: number
+    location?: {
+      type: 'Point'
+      coordinates: [number, number]
     }
   }
   resources?: string[]
@@ -469,7 +469,7 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
     useCompanyAddress: boolean
     maxKmRange: number
     noBorders: boolean
-    coordinates?: { latitude: number; longitude: number }
+    location?: { type: 'Point'; coordinates: [number, number] }
   }>) => {
     setFormData(prev => ({
       ...prev,
@@ -478,7 +478,7 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
         useCompanyAddress: prev.distance?.useCompanyAddress || false,
         maxKmRange: prev.distance?.maxKmRange || 50,
         noBorders: prev.distance?.noBorders || false,
-        coordinates: prev.distance?.coordinates,
+        location: prev.distance?.location,
         ...updates
       }
     }))
@@ -815,13 +815,13 @@ const Step1BasicInfo = forwardRef<Step1Ref, Step1Props>(({ data, onChange, onVal
               if (place?.coordinates) {
                 updateDistance({
                   address,
-                  coordinates: {
-                    latitude: place.coordinates.lat,
-                    longitude: place.coordinates.lng,
+                  location: {
+                    type: 'Point',
+                    coordinates: [place.coordinates.lng, place.coordinates.lat],
                   },
                 })
               } else {
-                updateDistance({ address, coordinates: undefined })
+                updateDistance({ address, location: undefined })
               }
             }}
             onValidation={setAddressValid}

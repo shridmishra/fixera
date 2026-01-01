@@ -113,9 +113,9 @@ interface ProjectData {
     useCompanyAddress: boolean
     maxKmRange: number
     noBorders: boolean
-    coordinates?: {
-      latitude: number
-      longitude: number
+    location?: {
+      type: 'Point'
+      coordinates: [number, number]
     }
   }
   resources?: string[]

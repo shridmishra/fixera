@@ -97,9 +97,9 @@ interface Project {
     useCompanyAddress?: boolean;
     noBorders?: boolean;
     borderLevel?: 'none' | 'country' | 'province';
-    coordinates?: {
-      latitude: number;
-      longitude: number;
+    location?: {
+      type: 'Point';
+      coordinates: [number, number];
     };
   };
 }
@@ -1588,8 +1588,11 @@ export default function ProjectBookingForm({
     typeof userCoordinates?.[1] === 'number' ? userCoordinates[1] : null;
   const customerLon =
     typeof userCoordinates?.[0] === 'number' ? userCoordinates[0] : null;
-  const serviceLat = project.distance?.coordinates?.latitude ?? null;
-  const serviceLon = project.distance?.coordinates?.longitude ?? null;
+  const serviceLocation = project.distance?.location?.coordinates;
+  const serviceLat =
+    typeof serviceLocation?.[1] === 'number' ? serviceLocation[1] : null;
+  const serviceLon =
+    typeof serviceLocation?.[0] === 'number' ? serviceLocation[0] : null;
   const maxServiceRadius = project.distance?.maxKmRange ?? null;
 
   const calculateDistanceKm = (
