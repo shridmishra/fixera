@@ -3,6 +3,7 @@
  */
 
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+import { logError } from './logger';
 
 // Type for daily availability schedule
 type DaySchedule = {
@@ -51,7 +52,11 @@ export function getWorkingWindowUtc(
 ): { workStartUtc: Date; workEndUtc: Date } | null {
   // Validate dateStr format (yyyy-MM-dd)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    console.error(`Invalid dateStr format: ${dateStr}`)
+    logError(
+      new Error('Invalid dateStr format'),
+      'Failed to parse date string in getWorkingWindowUtc',
+      { dateStr, professionalTimeZone, component: 'scheduleUtils', action: 'getWorkingWindowUtc' }
+    )
     return null
   }
 
@@ -78,7 +83,11 @@ export function getWorkingWindowUtc(
 
     return { workStartUtc, workEndUtc }
   } catch (error) {
-    console.error(`Error processing timezone conversion: ${error}`)
+    logError(
+      error,
+      'Error processing timezone conversion in getWorkingWindowUtc',
+      { dateStr, professionalTimeZone, component: 'scheduleUtils', action: 'getWorkingWindowUtc' }
+    )
     return null
   }
 }
