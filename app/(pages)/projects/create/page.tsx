@@ -113,9 +113,9 @@ interface ProjectData {
     useCompanyAddress: boolean
     maxKmRange: number
     noBorders: boolean
-    coordinates?: {
-      latitude: number
-      longitude: number
+    location?: {
+      type: 'Point'
+      coordinates: [number, number]
     }
   }
   resources?: string[]
@@ -320,6 +320,7 @@ export default function ProjectCreatePage() {
 
       loadProject()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   // Manual save function for draft
