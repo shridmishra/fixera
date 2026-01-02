@@ -52,6 +52,11 @@ export interface BlockedRange {
   isHoliday?: boolean;
 }
 
+interface PartialBookingDate {
+  date: string;
+  minutes: number;
+}
+
 interface Props {
   title?: string;
   description?: string;
@@ -60,6 +65,7 @@ interface Props {
   personalBlockedRanges?: BlockedRange[];
   companyBlockedDates?: (BlockedDate & { isHoliday?: boolean })[];
   companyBlockedRanges?: BlockedRange[];
+  partialBookingDates?: PartialBookingDate[];
   mode?: 'professional' | 'employee';
   onToggleDay?: (date: string) => void;
   onAddRange?: (s: string, e: string) => void;
@@ -86,6 +92,7 @@ export default function AvailabilityCalendar({
   personalBlockedRanges = [],
   companyBlockedDates = [],
   companyBlockedRanges = [],
+  partialBookingDates = [],
   onToggleDay,
   onAddRange,
   disabledPast = true,
@@ -108,6 +115,12 @@ export default function AvailabilityCalendar({
     );
     return m;
   }, [companyBlockedDates]);
+
+  const partialMap = useMemo(() => {
+    const m = new Map<string, number>();
+    partialBookingDates.forEach((d) => m.set(d.date, d.minutes));
+    return m;
+  }, [partialBookingDates]);
 
   const days = useMemo(() => {
     const s = startOfWeek(startOfMonth(cur), { weekStartsOn: 1 });
@@ -133,6 +146,7 @@ export default function AvailabilityCalendar({
   };
   const isPB = (d: Date) =>
     pSet.has(ymd(d)) || inRanges(d, personalBlockedRanges);
+  const isPartial = (d: Date) => partialMap.has(ymd(d));
   const isWork = (d: Date) => {
     const idx = d.getDay();
     const key: WeekdayKey = [
@@ -170,17 +184,20 @@ export default function AvailabilityCalendar({
       ? 'from-amber-200 to-orange-200'
       : isPB(d)
       ? 'from-rose-200 to-red-200'
+      : isPartial(d)
+      ? 'from-yellow-200 to-amber-200'
       : isWork(d)
       ? 'from-emerald-200 to-teal-200'
       : 'from-slate-200 to-gray-200';
-  const label = (d: Date) =>
-    isCompanyBlocked(d)
-      ? 'Company Block'
-      : isPB(d)
-      ? 'Blocked'
-      : isWork(d)
-      ? 'Available'
-      : 'Off';
+  const label = (d: Date) => {
+    if (isCompanyBlocked(d)) return 'Company Block';
+    if (isPB(d)) return 'Blocked';
+    if (isPartial(d)) {
+      return `Partially booked`;
+    }
+    if (isWork(d)) return 'Available';
+    return 'Off';
+  };
   const cellHeight = 'h-20';
   const borderPad = 'p-0';
   const innerPad = 'p-2';
@@ -270,8 +287,10 @@ export default function AvailabilityCalendar({
                       'border',
                       isCompanyBlocked(d) && 'border-orange-300',
                       isPB(d) && 'border-rose-300',
+                      isPartial(d) && !isCompanyBlocked(d) && !isPB(d) && 'border-yellow-400',
                       !isCompanyBlocked(d) &&
                         !isPB(d) &&
+                        !isPartial(d) &&
                         (isWork(d) ? 'border-emerald-300' : 'border-slate-300')
                     )}
                   >
@@ -286,8 +305,10 @@ export default function AvailabilityCalendar({
                         'text-[10px] px-2 py-0.5 rounded-full',
                         isCompanyBlocked(d) && 'bg-orange-100 text-orange-700',
                         isPB(d) && 'bg-rose-100 text-rose-700',
+                        isPartial(d) && !isCompanyBlocked(d) && !isPB(d) && 'bg-yellow-100 text-yellow-800',
                         !isCompanyBlocked(d) &&
                           !isPB(d) &&
+                          !isPartial(d) &&
                           (isWork(d)
                             ? 'bg-emerald-100 text-emerald-700'
                             : 'bg-slate-100 text-slate-700')
@@ -311,6 +332,11 @@ export default function AvailabilityCalendar({
             className='from-rose-200 to-red-200'
             label='Your Block'
             chipClass='bg-rose-100 text-rose-700'
+          />
+          <LegendDot
+            className='from-yellow-200 to-amber-200'
+            label='Partial Booking'
+            chipClass='bg-yellow-100 text-yellow-800'
           />
           <LegendDot
             className='from-emerald-200 to-teal-200'

@@ -696,10 +696,11 @@ export default function ProjectBookingForm({
     const [startHour, startMin] = startTime.split(':').map(Number);
     const [endHour, endMin] = endTime.split(':').map(Number);
 
-    const workingStart = new Date(date);
-    workingStart.setHours(startHour, startMin, 0, 0);
-    const workingEnd = new Date(date);
-    workingEnd.setHours(endHour, endMin, 0, 0);
+    // Create working hours in professional's timezone, then convert to UTC for comparison
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const tz = normalizeTimezone(professionalTimezone);
+    const workingStart = fromZonedTime(`${dateStr}T${startTime}:00`, tz);
+    const workingEnd = fromZonedTime(`${dateStr}T${endTime}:00`, tz);
 
     if (workingEnd <= workingStart) {
       return true;
@@ -794,16 +795,21 @@ export default function ProjectBookingForm({
     // Generate slots from start to last available slot
     let currentMinutes = startHour * 60 + startMin;
 
+    // Get date string for constructing timezone-aware times
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const tz = normalizeTimezone(professionalTimezone);
+
     while (currentMinutes <= lastSlotMinutes) {
       const hours = Math.floor(currentMinutes / 60);
       const minutes = currentMinutes % 60;
       const slotLabel = `${hours.toString().padStart(2, '0')}:${minutes
         .toString()
         .padStart(2, '0')}`;
-      const slotStart = new Date(date);
-      slotStart.setHours(hours, minutes, 0, 0);
-      const slotEnd = new Date(slotStart);
-      slotEnd.setMinutes(slotEnd.getMinutes() + executionMinutes);
+
+      // Create slot times in professional's timezone, then convert to UTC for comparison
+      const slotTimeStr = `${dateStr}T${slotLabel}:00`;
+      const slotStart = fromZonedTime(slotTimeStr, tz);
+      const slotEnd = new Date(slotStart.getTime() + executionMinutes * 60 * 1000);
 
       // Skip past slots for today
       if (isToday && slotStart <= now) {

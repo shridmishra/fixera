@@ -91,6 +91,7 @@ export default function ProfilePage() {
   const [newCompanyBlockedRange, setNewCompanyBlockedRange] = useState({startDate: '', endDate: '', reason: '', isHoliday: false})
   const [companyBlockingMode, setCompanyBlockingMode] = useState<'single' | 'range'>('range')
   const [bookingBlockedDates, setBookingBlockedDates] = useState<{date: string, reason?: string}[]>([])
+  const [partialBookingDates, setPartialBookingDates] = useState<{date: string, minutes: number}[]>([])
   const [profileSaving, setProfileSaving] = useState(false)
   const [showAutoPopulateDialog, setShowAutoPopulateDialog] = useState(false)
   const [pendingVatData, setPendingVatData] = useState<{
@@ -331,7 +332,13 @@ export default function ProfilePage() {
           .filter(([, minutes]) => minutes >= BOOKING_BLOCK_THRESHOLD_MINUTES)
           .map(([date]) => ({ date, reason: 'Booking' }))
 
+        // Track partial bookings (less than 4 hours but more than 0)
+        const partial = Array.from(minutesByDay.entries())
+          .filter(([, minutes]) => minutes > 0 && minutes < BOOKING_BLOCK_THRESHOLD_MINUTES)
+          .map(([date, minutes]) => ({ date, minutes }))
+
         setBookingBlockedDates(blocked)
+        setPartialBookingDates(partial)
       } catch (error) {
         // Ignore abort errors (expected when component unmounts)
         if (error instanceof Error && error.name === 'AbortError') {
@@ -1446,6 +1453,7 @@ export default function ProfilePage() {
                 personalBlockedRanges={blockedRanges}
                 companyBlockedDates={companyBlockedDates}
                 companyBlockedRanges={companyBlockedRanges}
+                partialBookingDates={partialBookingDates}
                 mode="professional"
                 compact
                 readOnly
