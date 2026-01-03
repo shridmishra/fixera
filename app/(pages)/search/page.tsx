@@ -389,6 +389,38 @@ function SearchPageContent() {
       };
       console.log('Search response:', data);
       console.log('Results count:', data.results?.length || 0);
+      if (searchType === 'projects' && Array.isArray(data.results)) {
+        const availabilityDebug = data.results
+          .map((project) => {
+            const projectData = project as ProjectResult;
+            const subprojects = projectData.subprojects || [];
+            const missingSubprojects = subprojects
+              .filter((subproject) => !subproject.firstAvailableDate)
+              .map((subproject) => ({
+                name: subproject.name,
+                executionDuration: subproject.executionDuration,
+                firstAvailableDate: subproject.firstAvailableDate ?? null,
+              }));
+            if (missingSubprojects.length === 0) {
+              return null;
+            }
+            return {
+              id: projectData._id,
+              title: projectData.title,
+              timeMode: projectData.timeMode,
+              executionDuration: projectData.executionDuration,
+              firstAvailableDate: projectData.firstAvailableDate ?? null,
+              missingSubprojects,
+            };
+          })
+          .filter(Boolean);
+        if (availabilityDebug.length > 0) {
+          console.warn(
+            '[SEARCH] Missing subproject availability data:',
+            availabilityDebug
+          );
+        }
+      }
       setResults(data.results ?? []);
       setPagination((prev) => data.pagination ?? prev);
       if (searchType === 'projects' && data.results?.length) {
