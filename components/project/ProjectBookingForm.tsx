@@ -774,15 +774,12 @@ export default function ProjectBookingForm({
       return true;
     }
 
-    const intervals = getBlockedIntervalsForDate(date);
-    return shouldBlockDayForIntervals(date, intervals);
-  };
-
   const addWorkingHoursForBuffer = (startDate: Date, hoursToAdd: number) => {
     let remainingMinutes = hoursToAdd * 60;
     let cursor = new Date(startDate);
     const maxIterations = 366 * 3;
     let iterations = 0;
+
     while (remainingMinutes > 0 && iterations < maxIterations) {
       iterations += 1;
       const dayStart = startOfDay(cursor);
@@ -790,11 +787,13 @@ export default function ProjectBookingForm({
         cursor = addDays(dayStart, 1);
         continue;
       }
+
       const { startTime, endTime } = getWorkingHoursForDate(dayStart);
       const [startHour, startMin] = startTime.split(':').map(Number);
       const [endHour, endMin] = endTime.split(':').map(Number);
       const startMinutes = startHour * 60 + startMin;
       const endMinutes = endHour * 60 + endMin;
+
       if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) {
         cursor = addDays(dayStart, 1);
         continue;
@@ -803,6 +802,7 @@ export default function ProjectBookingForm({
         cursor = addDays(dayStart, 1);
         continue;
       }
+
       let currentMinutes = cursor.getHours() * 60 + cursor.getMinutes();
       if (currentMinutes < startMinutes) {
         currentMinutes = startMinutes;
@@ -811,6 +811,7 @@ export default function ProjectBookingForm({
         cursor = addDays(dayStart, 1);
         continue;
       }
+
       const availableMinutes = endMinutes - currentMinutes;
       if (remainingMinutes <= availableMinutes) {
         const result = new Date(dayStart);
@@ -823,9 +824,11 @@ export default function ProjectBookingForm({
         );
         return result;
       }
+
       remainingMinutes -= availableMinutes;
       cursor = addDays(dayStart, 1);
     }
+
     console.warn(
       '[addWorkingHoursForBuffer] Max iterations reached; buffer end may be inaccurate'
     );
