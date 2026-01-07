@@ -141,7 +141,7 @@ const PREDEFINED_INCLUDED_ITEMS = {
 }
 
 // Price models that represent a total/flat price (no per-unit quantity)
-const TOTAL_PRICE_MODELS = [
+const TOTAL_PRICE_MODELS = new Set([
   'total',
   'total price',
   'fixed price (total)',
@@ -149,12 +149,11 @@ const TOTAL_PRICE_MODELS = [
   'flat price',
   'project total',
   'lump sum'
-]
+])
 
 const isTotalPriceModel = (priceModel?: string): boolean => {
   if (!priceModel) return false
-  const normalized = priceModel.trim().toLowerCase()
-  return TOTAL_PRICE_MODELS.some(model => normalized === model || normalized.startsWith(model + ' '))
+  return TOTAL_PRICE_MODELS.has(priceModel.trim().toLowerCase())
 }
 
 export default function Step2Subprojects({ data, onChange, onValidate }: Step2Props) {

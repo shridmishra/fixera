@@ -57,7 +57,7 @@ interface Project {
       type: 'fixed' | 'unit' | 'rfq';
       amount?: number;
       priceRange?: { min: number; max: number };
-      minQuantity?: number; // "Included quantity" - max quantity covered by fixed price
+      minQuantity?: number; // Fixed: max qty included in price | Unit: min order qty
       minProjectValue?: number;
     };
     preparationDuration?: {
@@ -227,12 +227,16 @@ export default function ProjectBookingForm({
     selectedPackageIndex !== null
       ? project.subprojects[selectedPackageIndex]
       : null;
-  // Note: minQuantity field represents "included quantity" - the max quantity covered by the fixed price
-  const maxUsage =
+  // minQuantity has different meanings based on pricing type:
+  // - Fixed pricing: max quantity included in the fixed price (cap)
+  // - Unit pricing: minimum order quantity required (floor)
+  const quantityLimit =
     typeof selectedPackage?.pricing?.minQuantity === 'number' &&
     selectedPackage.pricing.minQuantity > 0
       ? selectedPackage.pricing.minQuantity
       : undefined;
+  const isFixedPricing = selectedPackage?.pricing?.type === 'fixed';
+  const isUnitPricing = selectedPackage?.pricing?.type === 'unit';
 
   // Derive mode from execution duration unit (replaces root-level timeMode)
   const projectMode: 'hours' | 'days' =
@@ -1449,8 +1453,14 @@ export default function ProjectBookingForm({
         return false;
       }
 
-      if (maxUsage && estimatedUsage > maxUsage) {
-        toast.error(`Estimated usage cannot exceed ${maxUsage} (included in fixed price).`);
+      // For fixed pricing: quantityLimit is a cap (max included in price)
+      if (isFixedPricing && quantityLimit && estimatedUsage > quantityLimit) {
+        toast.error(`Estimated usage cannot exceed ${quantityLimit} (included in fixed price).`);
+        return false;
+      }
+      // For unit pricing: quantityLimit is a floor (minimum order)
+      if (isUnitPricing && quantityLimit && estimatedUsage < quantityLimit) {
+        toast.error(`Minimum order quantity is ${quantityLimit}.`);
         return false;
       }
     }
@@ -1900,10 +1910,16 @@ export default function ProjectBookingForm({
       return;
     }
 
-    if (maxUsage) {
-      setEstimatedUsage((prev) => Math.min(Math.max(1, prev || 1), maxUsage));
+    if (quantityLimit) {
+      if (isFixedPricing) {
+        // Cap at max included quantity
+        setEstimatedUsage((prev) => Math.min(Math.max(1, prev || 1), quantityLimit));
+      } else if (isUnitPricing) {
+        // Set to minimum order quantity if below
+        setEstimatedUsage((prev) => Math.max(quantityLimit, prev || quantityLimit));
+      }
     }
-  }, [selectedPackage, maxUsage]);
+  }, [selectedPackage, quantityLimit, isFixedPricing, isUnitPricing]);
 
   useEffect(() => {
     if (projectMode === 'hours') {
@@ -2100,20 +2116,22 @@ export default function ProjectBookingForm({
                             <Input
                               id='estimated-usage'
                               type='number'
-                              min='1'
-                              max={maxUsage}
+                              min={isUnitPricing && quantityLimit ? quantityLimit : 1}
+                              max={isFixedPricing ? quantityLimit : undefined}
                               step='1'
                               value={estimatedUsage}
                               onChange={(e) => {
                                 const value = Number(e.target.value);
-                                const normalized = Number.isNaN(value)
-                                  ? 1
-                                  : Math.max(1, value);
-                                setEstimatedUsage(
-                                  maxUsage
-                                    ? Math.min(normalized, maxUsage)
-                                    : normalized
-                                );
+                                let normalized = Number.isNaN(value) ? 1 : value;
+                                // Apply min/max constraints based on pricing type
+                                if (isFixedPricing && quantityLimit) {
+                                  normalized = Math.min(Math.max(1, normalized), quantityLimit);
+                                } else if (isUnitPricing && quantityLimit) {
+                                  normalized = Math.max(quantityLimit, normalized);
+                                } else {
+                                  normalized = Math.max(1, normalized);
+                                }
+                                setEstimatedUsage(normalized);
                               }}
                               className='text-lg'
                             />
