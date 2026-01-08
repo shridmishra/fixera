@@ -32,6 +32,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getViewerTimezone, normalizeTimezone } from '@/lib/timezoneDisplay';
 import { formatCurrency } from '@/lib/formatters';
 
+// Get unit label from priceModel (e.g., "m² of floor surface" → "m²")
+const getUnitLabel = (priceModel?: string): string => {
+  if (!priceModel) return 'unit';
+  const normalized = priceModel.toLowerCase().trim();
+  if (normalized.includes('m²') || normalized.includes('m2')) return 'm²';
+  if (normalized.includes('hour')) return 'hour';
+  if (normalized.includes('day')) return 'day';
+  if (normalized.includes('meter')) return 'meter';
+  if (normalized.includes('room')) return 'room';
+  // For "Total price" model, return 'unit' as fallback
+  if (normalized.includes('total')) return 'unit';
+  return priceModel; // Return original if no match
+};
+
 interface Project {
   _id: string;
   title: string;
@@ -57,9 +71,7 @@ interface Project {
       type: 'fixed' | 'unit' | 'rfq';
       amount?: number;
       priceRange?: { min: number; max: number };
-      includedQuantity?: number; // Fixed pricing: max quantity covered by price
       minOrderQuantity?: number; // Unit pricing: minimum order quantity
-      minProjectValue?: number;
     };
     preparationDuration?: {
       value: number;
@@ -228,16 +240,9 @@ export default function ProjectBookingForm({
     selectedPackageIndex !== null
       ? project.subprojects[selectedPackageIndex]
       : null;
-  const isFixedPricing = selectedPackage?.pricing?.type === 'fixed';
   const isUnitPricing = selectedPackage?.pricing?.type === 'unit';
-  // Fixed pricing: max quantity included in price (cap)
-  const includedQuantity =
-    isFixedPricing &&
-    typeof selectedPackage?.pricing?.includedQuantity === 'number' &&
-    selectedPackage.pricing.includedQuantity > 0
-      ? selectedPackage.pricing.includedQuantity
-      : undefined;
-  // Unit pricing: minimum order quantity (floor)
+
+  // Unit pricing: minimum order quantity (customer must order at least this)
   const minOrderQuantity =
     isUnitPricing &&
     typeof selectedPackage?.pricing?.minOrderQuantity === 'number' &&
@@ -508,18 +513,7 @@ export default function ProjectBookingForm({
 
   const shouldCollectUsage = (
     pricingType: 'fixed' | 'unit' | 'rfq'
-  ): boolean => {
-    if (pricingType === 'unit') {
-      return true;
-    }
-
-    const projectPriceModel = (project.priceModel || '').toLowerCase();
-    if (!projectPriceModel) {
-      return false;
-    }
-
-    return !projectPriceModel.includes('total');
-  };
+  ): boolean => pricingType === 'unit';
 
   const getBufferDuration = () => {
     if (selectedPackage?.buffer?.value && selectedPackage.buffer.value > 0) {
@@ -1460,11 +1454,6 @@ export default function ProjectBookingForm({
         return false;
       }
 
-      // Fixed pricing: cannot exceed included quantity
-      if (includedQuantity && estimatedUsage > includedQuantity) {
-        toast.error(`Estimated usage cannot exceed ${includedQuantity} (included in fixed price).`);
-        return false;
-      }
       // Unit pricing: must meet minimum order quantity
       if (minOrderQuantity && estimatedUsage < minOrderQuantity) {
         toast.error(`Minimum order quantity is ${minOrderQuantity}.`);
@@ -1917,14 +1906,12 @@ export default function ProjectBookingForm({
       return;
     }
 
-    if (includedQuantity) {
-      // Cap at max included quantity for fixed pricing
-      setEstimatedUsage((prev) => Math.min(Math.max(1, prev || 1), includedQuantity));
-    } else if (minOrderQuantity) {
-      // Set to minimum order quantity for unit pricing
-      setEstimatedUsage((prev) => Math.max(minOrderQuantity, prev || minOrderQuantity));
+    if (minOrderQuantity) {
+      setEstimatedUsage((prev) =>
+        Math.max(minOrderQuantity, prev || minOrderQuantity)
+      );
     }
-  }, [selectedPackage, includedQuantity, minOrderQuantity]);
+  }, [selectedPackage, minOrderQuantity]);
 
   useEffect(() => {
     if (projectMode === 'hours') {
@@ -2086,17 +2073,9 @@ export default function ProjectBookingForm({
                                       selectedPackage.pricing.amount
                                     )}
                                     <span className='text-sm font-normal text-gray-500 ml-1'>
-                                      /{project.priceModel || 'unit'}
+                                      /{getUnitLabel(project.priceModel)}
                                     </span>
                                   </p>
-                                  {selectedPackage.pricing.minProjectValue && (
-                                    <p className='text-xs text-gray-500 mt-1'>
-                                      Min. order{' '}
-                                      {formatCurrency(
-                                        selectedPackage.pricing.minProjectValue
-                                      )}
-                                    </p>
-                                  )}
                                 </div>
                               )}
                             {selectedPackage.pricing.type === 'rfq' && (
@@ -2121,25 +2100,25 @@ export default function ProjectBookingForm({
                             <Input
                               id='estimated-usage'
                               type='number'
-                              min={minOrderQuantity || 1}
-                              max={includedQuantity}
+                              min={minOrderQuantity ?? 1}
                               step='1'
                               value={estimatedUsage}
                               onChange={(e) => {
-                                const value = Number(e.target.value);
-                                let normalized = Number.isNaN(value) ? 1 : value;
-                                // Apply min/max constraints based on pricing type
-                                if (includedQuantity) {
-                                  normalized = Math.min(Math.max(1, normalized), includedQuantity);
-                                } else if (minOrderQuantity) {
-                                  normalized = Math.max(minOrderQuantity, normalized);
-                                } else {
-                                  normalized = Math.max(1, normalized);
+                                let value = Number(e.target.value);
+
+                                if (Number.isNaN(value)) {
+                                  value = minOrderQuantity ?? 1;
                                 }
-                                setEstimatedUsage(normalized);
+
+                                if (minOrderQuantity) {
+                                  value = Math.max(minOrderQuantity, value);
+                                }
+
+                                setEstimatedUsage(value);
                               }}
                               className='text-lg'
                             />
+
                             {project.priceModel && (
                               <span className='text-sm text-gray-500 whitespace-nowrap'>
                                 {project.priceModel}
@@ -2155,7 +2134,7 @@ export default function ProjectBookingForm({
                           </p>
                         </div>
 
-                        {selectedPackage.pricing.amount && (
+                        {selectedPackage.pricing.type !== 'rfq' &&selectedPackage.pricing.amount && (
                           <div className='bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6 space-y-2'>
                             <p className='text-sm text-gray-600'>
                               Estimated Price:
@@ -2167,21 +2146,11 @@ export default function ProjectBookingForm({
                               )}
                             </p>
                             <p className='text-sm text-gray-500'>
-                              {estimatedUsage} {project.priceModel || 'units'} x{' '}
+                              {estimatedUsage}{' '}
+                              {getUnitLabel(project.priceModel)} x{' '}
                               {formatCurrency(selectedPackage.pricing.amount)}/
-                              {project.priceModel || 'unit'}
+                              {getUnitLabel(project.priceModel)}
                             </p>
-                            {selectedPackage.pricing.minProjectValue &&
-                              estimatedUsage *
-                                (selectedPackage.pricing.amount || 0) <
-                                selectedPackage.pricing.minProjectValue && (
-                                <div className='mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800'>
-                                  <strong>Note:</strong> Minimum order value is{' '}
-                                  {formatCurrency(
-                                    selectedPackage.pricing.minProjectValue
-                                  )}
-                                </div>
-                              )}
                           </div>
                         )}
                       </div>
@@ -2791,9 +2760,9 @@ export default function ProjectBookingForm({
                         {shouldShowUsageBreakdown && (
                           <p className='text-xs text-gray-600 pt-2'>
                             Based on {estimatedUsage}{' '}
-                            {project.priceModel || 'units'} at{' '}
+                            {getUnitLabel(project.priceModel)} at{' '}
                             {formatCurrency(selectedPackage.pricing.amount)}/
-                            {project.priceModel || 'unit'}
+                            {getUnitLabel(project.priceModel)}
                           </p>
                         )}
                       </div>
@@ -2933,7 +2902,7 @@ export default function ProjectBookingForm({
                             <span className='font-semibold text-blue-600'>
                               {formatCurrency(selectedPackage.pricing.amount)}
                               <span className='text-xs font-normal text-gray-500 ml-1'>
-                                /{project.priceModel || 'unit'}
+                                /{getUnitLabel(project.priceModel)}
                               </span>
                             </span>
                           )}
@@ -3050,9 +3019,9 @@ export default function ProjectBookingForm({
 
                       {shouldShowUsageBreakdown && (
                         <p className='text-xs text-gray-600'>
-                          ({estimatedUsage} {project.priceModel || 'units'} ×{' '}
+                          ({estimatedUsage} {getUnitLabel(project.priceModel)} ×{' '}
                           {formatCurrency(selectedPackage.pricing.amount)}/
-                          {project.priceModel || 'unit'})
+                          {getUnitLabel(project.priceModel)})
                         </p>
                       )}
 
