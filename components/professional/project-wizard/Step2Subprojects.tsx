@@ -57,7 +57,8 @@ interface ISubproject {
     amount?: number
     priceRange?: { min: number; max: number }
     minProjectValue?: number
-    minQuantity?: number
+    includedQuantity?: number // Fixed pricing: max quantity covered by price
+    minOrderQuantity?: number // Unit pricing: minimum order quantity
   }
   included: IIncludedItem[]
   materialsIncluded: boolean
@@ -140,7 +141,33 @@ const PREDEFINED_INCLUDED_ITEMS = {
   ]
 }
 
+// Price models that represent a total/flat price (no per-unit quantity)
+const TOTAL_PRICE_MODELS = new Set([
+  'total',
+  'total price',
+  'fixed price total',
+  'flat rate',
+  'flat price',
+  'project total',
+  'lump sum'
+])
+
+const isTotalPriceModel = (priceModel?: string): boolean => {
+  if (!priceModel) return false
+  // Normalize: lowercase, replace separators with space, collapse spaces, trim
+  const normalized = priceModel
+    .toLowerCase()
+    .replace(/[\W_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return TOTAL_PRICE_MODELS.has(normalized)
+}
+
 export default function Step2Subprojects({ data, onChange, onValidate }: Step2Props) {
+  // Show "Included Quantity" in fixed pricing when priceModel is unit-based (e.g., "per m²")
+  // This defines the maximum quantity included in the fixed price
+  const showIncludedQuantity = data.priceModel && !isTotalPriceModel(data.priceModel)
+
   const normalizePreparationDuration = (subproject?: ISubproject) => {
     const value =
       typeof subproject?.preparationDuration?.value === 'number'
@@ -639,19 +666,39 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                   </div>
 
                     {subproject.pricing.type === 'fixed' && (
-                      <div>
-                        <Label>Total Price (EUR) *</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={subproject.pricing.amount || ''}
-                          onChange={(e) => updateSubproject(subproject.id, {
-                            pricing: { ...subproject.pricing, amount: parseFloat(e.target.value) }
-                          })}
-                          placeholder="0.00"
-                        />
-                      </div>
+                      <>
+                        <div>
+                          <Label>Total Price (EUR) *</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={subproject.pricing.amount || ''}
+                            onChange={(e) => updateSubproject(subproject.id, {
+                              pricing: { ...subproject.pricing, amount: parseFloat(e.target.value) }
+                            })}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        {showIncludedQuantity && (
+                          <div>
+                            <Label>Included Quantity</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={subproject.pricing.includedQuantity || ''}
+                              onChange={(e) => updateSubproject(subproject.id, {
+                                pricing: { ...subproject.pricing, includedQuantity: parseInt(e.target.value) || undefined }
+                              })}
+                              placeholder="1"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Maximum quantity included in this fixed price
+                            </p>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {subproject.pricing.type === 'unit' && (
@@ -675,9 +722,9 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                             type="number"
                             min="1"
                             step="1"
-                            value={subproject.pricing.minQuantity || ''}
+                            value={subproject.pricing.minOrderQuantity || ''}
                             onChange={(e) => updateSubproject(subproject.id, {
-                              pricing: { ...subproject.pricing, minQuantity: parseInt(e.target.value) || undefined }
+                              pricing: { ...subproject.pricing, minOrderQuantity: parseInt(e.target.value) || undefined }
                             })}
                             placeholder="1"
                           />

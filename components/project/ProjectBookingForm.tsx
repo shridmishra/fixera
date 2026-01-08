@@ -57,6 +57,8 @@ interface Project {
       type: 'fixed' | 'unit' | 'rfq';
       amount?: number;
       priceRange?: { min: number; max: number };
+      includedQuantity?: number; // Fixed pricing: max quantity covered by price
+      minOrderQuantity?: number; // Unit pricing: minimum order quantity
       minProjectValue?: number;
     };
     preparationDuration?: {
@@ -226,6 +228,22 @@ export default function ProjectBookingForm({
     selectedPackageIndex !== null
       ? project.subprojects[selectedPackageIndex]
       : null;
+  const isFixedPricing = selectedPackage?.pricing?.type === 'fixed';
+  const isUnitPricing = selectedPackage?.pricing?.type === 'unit';
+  // Fixed pricing: max quantity included in price (cap)
+  const includedQuantity =
+    isFixedPricing &&
+    typeof selectedPackage?.pricing?.includedQuantity === 'number' &&
+    selectedPackage.pricing.includedQuantity > 0
+      ? selectedPackage.pricing.includedQuantity
+      : undefined;
+  // Unit pricing: minimum order quantity (floor)
+  const minOrderQuantity =
+    isUnitPricing &&
+    typeof selectedPackage?.pricing?.minOrderQuantity === 'number' &&
+    selectedPackage.pricing.minOrderQuantity > 0
+      ? selectedPackage.pricing.minOrderQuantity
+      : undefined;
 
   // Derive mode from execution duration unit (replaces root-level timeMode)
   const projectMode: 'hours' | 'days' =
@@ -1441,6 +1459,17 @@ export default function ProjectBookingForm({
         toast.error('Please provide an estimated usage amount');
         return false;
       }
+
+      // Fixed pricing: cannot exceed included quantity
+      if (includedQuantity && estimatedUsage > includedQuantity) {
+        toast.error(`Estimated usage cannot exceed ${includedQuantity} (included in fixed price).`);
+        return false;
+      }
+      // Unit pricing: must meet minimum order quantity
+      if (minOrderQuantity && estimatedUsage < minOrderQuantity) {
+        toast.error(`Minimum order quantity is ${minOrderQuantity}.`);
+        return false;
+      }
     }
 
     if (currentStep === 2) {
@@ -1885,8 +1914,17 @@ export default function ProjectBookingForm({
 
     if (!shouldCollectUsage(selectedPackage.pricing.type)) {
       setEstimatedUsage(1);
+      return;
     }
-  }, [selectedPackage]);
+
+    if (includedQuantity) {
+      // Cap at max included quantity for fixed pricing
+      setEstimatedUsage((prev) => Math.min(Math.max(1, prev || 1), includedQuantity));
+    } else if (minOrderQuantity) {
+      // Set to minimum order quantity for unit pricing
+      setEstimatedUsage((prev) => Math.max(minOrderQuantity, prev || minOrderQuantity));
+    }
+  }, [selectedPackage, includedQuantity, minOrderQuantity]);
 
   useEffect(() => {
     if (projectMode === 'hours') {
@@ -2079,23 +2117,31 @@ export default function ProjectBookingForm({
                               : ''}{' '}
                             *
                           </Label>
-                          <div className='relative mt-2'>
+                          <div className='mt-2 flex items-center gap-2'>
                             <Input
                               id='estimated-usage'
                               type='number'
-                              min='1'
+                              min={minOrderQuantity || 1}
+                              max={includedQuantity}
                               step='1'
                               value={estimatedUsage}
                               onChange={(e) => {
                                 const value = Number(e.target.value);
-                                setEstimatedUsage(
-                                  Number.isNaN(value) ? 1 : Math.max(1, value)
-                                );
+                                let normalized = Number.isNaN(value) ? 1 : value;
+                                // Apply min/max constraints based on pricing type
+                                if (includedQuantity) {
+                                  normalized = Math.min(Math.max(1, normalized), includedQuantity);
+                                } else if (minOrderQuantity) {
+                                  normalized = Math.max(minOrderQuantity, normalized);
+                                } else {
+                                  normalized = Math.max(1, normalized);
+                                }
+                                setEstimatedUsage(normalized);
                               }}
-                              className='text-lg pr-16'
+                              className='text-lg'
                             />
                             {project.priceModel && (
-                              <span className='absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none'>
+                              <span className='text-sm text-gray-500 whitespace-nowrap'>
                                 {project.priceModel}
                               </span>
                             )}
