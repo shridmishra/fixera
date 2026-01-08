@@ -158,10 +158,22 @@ const getUnitLabel = (priceModel?: string): string => {
   return priceModel // Return original if no match
 }
 
+type PricingType = 'fixed' | 'unit' | 'rfq'
+
+const getValidPricingTypes = (category?: string, priceModel?: string): PricingType[] => {
+  const isRenovation = category?.toLowerCase() === 'renovation'
+  if (isRenovation) return ['rfq']
+  if (isTotalPriceModel(priceModel)) return ['fixed', 'rfq']
+  return ['unit', 'rfq']
+}
+
+const getDefaultPricingType = (category?: string, priceModel?: string): PricingType =>
+  getValidPricingTypes(category, priceModel)[0]
+
 export default function Step2Subprojects({ data, onChange, onValidate }: Step2Props) {
   // Determine if this is a total price model or unit-based model
-  const isTotalPrice = isTotalPriceModel(data.priceModel)
   const unitLabel = getUnitLabel(data.priceModel)
+  const validPricingTypes = getValidPricingTypes(data.category, data.priceModel)
 
   const normalizePreparationDuration = (subproject?: ISubproject) => {
     const value =
@@ -267,17 +279,8 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
 
   // Fix pricing types when priceModel changes (ensure they match available options)
   useEffect(() => {
-    const isRenovation = data.category?.toLowerCase() === 'renovation'
-
-    // Determine valid pricing types based on category and priceModel
-    const getValidTypes = (): Array<'fixed' | 'unit' | 'rfq'> => {
-      if (isRenovation) return ['rfq']
-      if (isTotalPrice) return ['fixed', 'rfq']
-      return ['unit', 'rfq']
-    }
-
-    const validTypes = getValidTypes()
-    const defaultType = validTypes[0]
+    const validTypes = getValidPricingTypes(data.category, data.priceModel)
+    const defaultType = getDefaultPricingType(data.category, data.priceModel)
 
     // Check if any subproject has an invalid pricing type
     const needsUpdate = subprojects.some(sub => !validTypes.includes(sub.pricing.type))
@@ -295,7 +298,7 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
       setSubprojects(updatedSubprojects)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.priceModel, data.category, isTotalPrice])
+  }, [data.priceModel, data.category])
 
   const validateForm = () => {
     const isValid = subprojects.length > 0 && subprojects.every(sub =>
@@ -320,17 +323,7 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
     }
 
     // Set default pricing type based on category and priceModel
-    const isRenovation = data.category?.toLowerCase() === 'renovation'
-    let defaultPricingType: 'fixed' | 'unit' | 'rfq' = 'rfq'
-
-    if (isRenovation) {
-      defaultPricingType = 'rfq'
-    } else if (isTotalPrice) {
-      defaultPricingType = 'fixed'
-    } else {
-      // Unit-based model (m², hour, etc.)
-      defaultPricingType = 'unit'
-    }
+    const defaultPricingType = getDefaultPricingType(data.category, data.priceModel)
 
     const newSubproject: ISubproject = {
       id: Date.now().toString(),
@@ -681,22 +674,13 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                         <SelectValue placeholder="Select pricing type" />
                       </SelectTrigger>
                       <SelectContent>
-                        {data.category?.toLowerCase() === 'renovation' ? (
-                          // Renovation: only RFQ
-                          <SelectItem value="rfq">RFQ (Request for Quote)</SelectItem>
-                        ) : isTotalPrice ? (
-                          // Total price model: Fixed or RFQ
-                          <>
-                            <SelectItem value="fixed">Fixed Price (Total)</SelectItem>
-                            <SelectItem value="rfq">RFQ (Request for Quote)</SelectItem>
-                          </>
-                        ) : (
-                          // Unit-based model: Unit pricing or RFQ
-                          <>
-                            <SelectItem value="unit">Price per {unitLabel}</SelectItem>
-                            <SelectItem value="rfq">RFQ (Request for Quote)</SelectItem>
-                          </>
-                        )}
+                        {validPricingTypes.map((pricingType) => (
+                          <SelectItem key={pricingType} value={pricingType}>
+                            {pricingType === 'fixed' && 'Fixed Price (Total)'}
+                            {pricingType === 'unit' && `Price per ${unitLabel}`}
+                            {pricingType === 'rfq' && 'RFQ (Request for Quote)'}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-gray-500">
