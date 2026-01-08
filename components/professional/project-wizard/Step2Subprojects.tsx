@@ -282,11 +282,14 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
     const validTypes = getValidPricingTypes(data.category, data.priceModel)
     const defaultType = getDefaultPricingType(data.category, data.priceModel)
 
-    // Check if any subproject has an invalid pricing type
-    const needsUpdate = subprojects.some(sub => !validTypes.includes(sub.pricing.type))
+    setSubprojects(prev => {
+      const needsUpdate = prev.some(sub => !validTypes.includes(sub.pricing.type))
 
-    if (needsUpdate && subprojects.length > 0) {
-      const updatedSubprojects = subprojects.map(sub => {
+      if (!needsUpdate || prev.length === 0) {
+        return prev
+      }
+
+      return prev.map(sub => {
         if (!validTypes.includes(sub.pricing.type)) {
           return {
             ...sub,
@@ -295,8 +298,7 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
         }
         return sub
       })
-      setSubprojects(updatedSubprojects)
-    }
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.priceModel, data.category])
 
