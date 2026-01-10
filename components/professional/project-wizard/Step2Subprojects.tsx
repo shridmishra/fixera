@@ -1615,7 +1615,7 @@ export default function Step2Subprojects({ data, onChange, onValidate }: Step2Pr
                         )}
                       </td>
                       <td className="p-2">
-                        {sub.pricing.type === 'rfq' && sub.executionDuration.range ? (
+                        {sub.pricing.type === 'rfq' && sub.executionDuration.range?.min && sub.executionDuration.range?.max ? (
                           `${sub.executionDuration.range.min}-${sub.executionDuration.range.max} ${sub.executionDuration.unit}`
                         ) : (
                           `${sub.executionDuration.value} ${sub.executionDuration.unit}`
