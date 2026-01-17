@@ -221,6 +221,29 @@ interface ScheduleProposalsResponse {
   };
 }
 
+type ScheduleProposalsDebugInfo = NonNullable<
+  NonNullable<ScheduleProposalsResponse['proposals']>['_debug']
+>;
+
+interface AvailabilityDebugInfo extends Partial<ScheduleProposalsDebugInfo> {
+  executionDays?: number;
+  minResources?: number;
+  totalResources?: number;
+  requiredOverlap?: number;
+  useWindowBasedCheck?: boolean;
+  teamMembers?: unknown[];
+  bookings?: unknown[];
+  dateBlockedMembers?: Record<string, unknown> | null;
+}
+
+interface AvailabilityResponse {
+  success: boolean;
+  blockedDates?: string[];
+  blockedRanges?: BlockedRange[];
+  resourcePolicy?: ResourcePolicy;
+  _debug?: AvailabilityDebugInfo;
+}
+
 interface DayAvailability {
   available: boolean;
   startTime?: string;
@@ -256,6 +279,8 @@ const hasDurationRange = (
 ): duration is SubprojectExecutionDuration & {
   range: { min?: number; max?: number };
 } => Boolean(duration && 'range' in duration && duration.range);
+
+const isDev = process.env.NODE_ENV === 'development';
 
 export default function ProjectBookingForm({
   project,
@@ -504,27 +529,43 @@ export default function ProjectBookingForm({
         url += `?subprojectIndex=${packageIndex}`;
       }
       const response = await fetch(url);
-      const data = await response.json();
+      const data: AvailabilityResponse = await response.json();
 
       console.log('%c[AVAILABILITY API]', 'color: #00aa00; font-weight: bold', {
         blockedDatesCount: data.blockedDates?.length || 0,
         blockedRangesCount: data.blockedRanges?.length || 0,
         resourcePolicy: data.resourcePolicy,
       });
-      if (data._debug) {
-        console.log('%c[AVAILABILITY DEBUG]', 'color: #00aa00; font-weight: bold', {
-          projectId: data._debug.projectId,
-          subprojectIndex: data._debug.subprojectIndex,
-          timeZone: data._debug.timeZone,
-          executionDays: data._debug.executionDays,
-          minResources: data._debug.minResources,
-          totalResources: data._debug.totalResources,
-          requiredOverlap: data._debug.requiredOverlap,
-          useWindowBasedCheck: data._debug.useWindowBasedCheck,
-        });
-        console.log('%c[TEAM MEMBERS]', 'color: #ff6600; font-weight: bold', data._debug.teamMembers);
-        console.log('%c[BOOKINGS BLOCKING TEAM]', 'color: #cc0000; font-weight: bold', data._debug.bookings);
-        console.log('%c[DATES WITH BLOCKED MEMBERS]', 'color: #9900cc; font-weight: bold', data._debug.dateBlockedMembers);
+      if (isDev && data._debug) {
+        console.log(
+          '%c[AVAILABILITY DEBUG]',
+          'color: #00aa00; font-weight: bold',
+          {
+            projectId: data._debug?.projectId,
+            subprojectIndex: data._debug?.subprojectIndex,
+            timeZone: data._debug?.timeZone,
+            executionDays: data._debug?.executionDays,
+            minResources: data._debug?.minResources,
+            totalResources: data._debug?.totalResources,
+            requiredOverlap: data._debug?.requiredOverlap,
+            useWindowBasedCheck: data._debug?.useWindowBasedCheck,
+          }
+        );
+        console.log(
+          '%c[TEAM MEMBERS]',
+          'color: #ff6600; font-weight: bold',
+          data._debug?.teamMembers
+        );
+        console.log(
+          '%c[BOOKINGS BLOCKING TEAM]',
+          'color: #cc0000; font-weight: bold',
+          data._debug?.bookings
+        );
+        console.log(
+          '%c[DATES WITH BLOCKED MEMBERS]',
+          'color: #9900cc; font-weight: bold',
+          data._debug?.dateBlockedMembers
+        );
       }
 
       if (data.success) {
@@ -564,14 +605,20 @@ export default function ProjectBookingForm({
       const response = await fetch(endpoint);
       const data: ScheduleProposalsResponse = await response.json();
 
-      console.log('%c[PROPOSALS API]', 'color: #0066cc; font-weight: bold', {
-        earliestBookableDate: data.proposals?.earliestBookableDate,
-        earliestProposal: data.proposals?.earliestProposal,
-        mode: data.proposals?.mode,
-        _debug: data.proposals?._debug,
-      });
-      if (data.proposals?._debug) {
-        console.log('%c[PROPOSALS DEBUG]', 'color: #0066cc', data.proposals._debug);
+      if (isDev) {
+        console.log('%c[PROPOSALS API]', 'color: #0066cc; font-weight: bold', {
+          earliestBookableDate: data.proposals?.earliestBookableDate,
+          earliestProposal: data.proposals?.earliestProposal,
+          mode: data.proposals?.mode,
+          _debug: data.proposals?._debug,
+        });
+        if (data.proposals?._debug) {
+          console.log(
+            '%c[PROPOSALS DEBUG]',
+            'color: #0066cc',
+            data.proposals._debug
+          );
+        }
       }
       if (data.success && data.proposals) {
         setProposals(data.proposals);
