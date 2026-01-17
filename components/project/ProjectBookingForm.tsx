@@ -1,7 +1,3 @@
-
-
-
-//fixera/components/project/ProjectBookingForm.tsx
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
