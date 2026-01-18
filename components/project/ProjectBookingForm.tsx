@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -318,6 +318,14 @@ export default function ProjectBookingForm({
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [showCalendar, setShowCalendar] = useState(false);
   const [hasUserSelectedDate, setHasUserSelectedDate] = useState(false);
+  const [scheduleWindow, setScheduleWindow] = useState<{
+    scheduledStartDate: string;
+    scheduledExecutionEndDate: string;
+    scheduledBufferStartDate?: string;
+    scheduledBufferEndDate?: string;
+    scheduledBufferUnit?: string;
+  } | null>(null);
+  const [loadingScheduleWindow, setLoadingScheduleWindow] = useState(false);
   const [rfqAnswers, setRFQAnswers] = useState<RFQAnswer[]>([]);
   const [selectedExtraOptions, setSelectedExtraOptions] = useState<number[]>(
     []
@@ -515,6 +523,56 @@ export default function ProjectBookingForm({
     selectedPackage,
     selectedTime,
   ]);
+
+  const fetchScheduleWindow = useCallback(async (startDate: string, startTime?: string) => {
+    try {
+      setLoadingScheduleWindow(true);
+      let url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/projects/${project._id}/schedule-window?startDate=${startDate}`;
+      if (typeof selectedPackageIndex === 'number') {
+        url += `&subprojectIndex=${selectedPackageIndex}`;
+      }
+      if (startTime) {
+        url += `&startTime=${startTime}`;
+      }
+      console.log('%c[SCHEDULE WINDOW] Fetching...', 'color: #ff6600; font-weight: bold', {
+        url,
+        startDate,
+        startTime,
+        selectedPackageIndex
+      });
+      const response = await fetch(url);
+      const data = await response.json();
+      console.log('%c[SCHEDULE WINDOW] Response:', 'color: #ff6600; font-weight: bold', data);
+      if (data.success && data.window) {
+        console.log('%c[SCHEDULE WINDOW] Setting scheduleWindow state:', 'color: #00cc00; font-weight: bold', data.window);
+        setScheduleWindow(data.window);
+      } else {
+        console.warn('%c[SCHEDULE WINDOW] Not available:', 'color: #cc0000', data.error);
+        setScheduleWindow(null);
+      }
+    } catch (error) {
+      console.error('%c[SCHEDULE WINDOW] Error:', 'color: #cc0000', error);
+      setScheduleWindow(null);
+    } finally {
+      setLoadingScheduleWindow(false);
+      console.log('[SCHEDULE WINDOW] Loading complete');
+    }
+  }, [project._id, selectedPackageIndex]);
+
+  // Fetch schedule window from backend when date changes (for days mode)
+  useEffect(() => {
+    console.log('[SCHEDULE WINDOW] useEffect triggered:', {
+      selectedDate,
+      projectMode,
+      loadingAvailability,
+      selectedPackageIndex,
+      shouldFetch: selectedDate && projectMode === 'days' && !loadingAvailability
+    });
+    if (selectedDate && projectMode === 'days' && !loadingAvailability) {
+      console.log('[SCHEDULE WINDOW] Calling fetchScheduleWindow for date:', selectedDate);
+      fetchScheduleWindow(selectedDate);
+    }
+  }, [selectedDate, projectMode, loadingAvailability, fetchScheduleWindow]);
 
   const fetchTeamAvailability = async (packageIndex?: number) => {
     try {
@@ -1923,6 +1981,15 @@ export default function ProjectBookingForm({
   const projectedCompletionDate = calculateCompletionDate();
   const projectedCompletionDateTime = calculateCompletionDateTime();
 
+  // Debug log for completion date display
+  console.log('[SCHEDULE WINDOW] Render state:', {
+    scheduleWindow,
+    loadingScheduleWindow,
+    projectedCompletionDate: projectedCompletionDate?.toISOString(),
+    projectMode,
+    selectedDate
+  });
+
   const shortestThroughputDetails = (() => {
     if (
       !proposals?.shortestThroughputProposal?.start ||
@@ -2715,11 +2782,13 @@ export default function ProjectBookingForm({
 
                         {(projectMode === 'hours'
                           ? projectedCompletionDateTime
-                          : projectedCompletionDate) && (
+                          : (scheduleWindow?.scheduledExecutionEndDate || projectedCompletionDate)) && (
                           <>
                             <p className='text-sm text-blue-900 font-semibold pt-2 border-t border-blue-300'>
                               <strong>Projected Completion:</strong>{' '}
-                              {projectMode === 'hours' &&
+                              {loadingScheduleWindow ? (
+                                <span className='text-blue-600'>Calculating...</span>
+                              ) : projectMode === 'hours' &&
                               projectedCompletionDateTime
                                 ? `${format(
                                     projectedCompletionDateTime,
@@ -2731,6 +2800,11 @@ export default function ProjectBookingForm({
                                       minute: '2-digit',
                                     }
                                   )}`
+                                : scheduleWindow?.scheduledExecutionEndDate
+                                ? format(
+                                    parseISO(scheduleWindow.scheduledExecutionEndDate),
+                                    'EEEE, MMMM d, yyyy'
+                                  )
                                 : projectedCompletionDate
                                 ? format(
                                     projectedCompletionDate,
@@ -3105,11 +3179,13 @@ export default function ProjectBookingForm({
                     </p>
                     {(projectMode === 'hours'
                       ? projectedCompletionDateTime
-                      : projectedCompletionDate) && (
+                      : (scheduleWindow?.scheduledExecutionEndDate || projectedCompletionDate)) && (
                       <>
                         <p className='text-sm font-semibold pt-2 border-t border-gray-300'>
                           <strong>Expected Completion:</strong>{' '}
-                          {projectMode === 'hours' &&
+                          {loadingScheduleWindow ? (
+                            <span className='text-gray-500'>Calculating...</span>
+                          ) : projectMode === 'hours' &&
                           projectedCompletionDateTime
                             ? `${format(
                                 projectedCompletionDateTime,
@@ -3121,6 +3197,11 @@ export default function ProjectBookingForm({
                                   minute: '2-digit',
                                 }
                               )}`
+                            : scheduleWindow?.scheduledExecutionEndDate
+                            ? format(
+                                parseISO(scheduleWindow.scheduledExecutionEndDate),
+                                'EEEE, MMMM d, yyyy'
+                              )
                             : projectedCompletionDate
                             ? format(
                                 projectedCompletionDate,
