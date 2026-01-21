@@ -21,7 +21,9 @@ import {
   Users,
   Trash2,
   X,
-  Plus
+  Plus,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -100,6 +102,14 @@ export default function EmployeeManagement() {
   const [blockedRanges, setBlockedRanges] = useState<{startDate: string, endDate: string, reason?: string}[]>([])
   const [newBlockedDate, setNewBlockedDate] = useState({date: '', reason: ''})
   const [newBlockedRange, setNewBlockedRange] = useState({startDate: '', endDate: '', reason: ''})
+
+  // Pagination states
+  const EMPLOYEES_PER_PAGE = 10
+  const ITEMS_PER_PAGE = 5
+  const [employeesPage, setEmployeesPage] = useState(1)
+  const [blockedDatesPage, setBlockedDatesPage] = useState(1)
+  const [blockedRangesPage, setBlockedRangesPage] = useState(1)
+  const [bookingBlockedRangesPage, setBookingBlockedRangesPage] = useState(1)
 
   // Fetch employees
   const fetchEmployees = async () => {
@@ -247,15 +257,23 @@ export default function EmployeeManagement() {
   // Open availability dialog
   const openAvailabilityDialog = (employee: Employee) => {
     setAvailabilityDialog(employee)
+    // Reset pagination pages
+    setBlockedDatesPage(1)
+    setBlockedRangesPage(1)
+    setBookingBlockedRangesPage(1)
     // Load employee's blocked dates
     if (employee.blockedDates) {
       setBlockedDates(employee.blockedDates.map(d => ({
         date: typeof d === 'string' ? d : new Date(d).toISOString().split('T')[0],
         reason: undefined
       })))
+    } else {
+      setBlockedDates([])
     }
     if (employee.blockedRanges) {
       setBlockedRanges(employee.blockedRanges)
+    } else {
+      setBlockedRanges([])
     }
   }
 
@@ -486,19 +504,27 @@ export default function EmployeeManagement() {
                 </Button>
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Availability</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employees.map((member) => (
+              {(() => {
+                const totalEmployeesPages = Math.ceil(employees.length / EMPLOYEES_PER_PAGE)
+                const paginatedEmployees = employees.slice(
+                  (employeesPage - 1) * EMPLOYEES_PER_PAGE,
+                  employeesPage * EMPLOYEES_PER_PAGE
+                )
+                return (
+                  <>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Contact</TableHead>
+                            <TableHead>Availability</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedEmployees.map((member) => (
                       <TableRow key={member._id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -605,13 +631,49 @@ export default function EmployeeManagement() {
                                 <RotateCcw className="h-4 w-4" />
                               </Button>
                             )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Employees Pagination */}
+                  {totalEmployeesPages > 1 && (
+                    <div className="flex items-center justify-between pt-4">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {(employeesPage - 1) * EMPLOYEES_PER_PAGE + 1} to{' '}
+                        {Math.min(employeesPage * EMPLOYEES_PER_PAGE, employees.length)} of {employees.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEmployeesPage(p => Math.max(1, p - 1))}
+                          disabled={employeesPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <span className="text-sm">
+                          Page {employeesPage} of {totalEmployeesPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEmployeesPage(p => Math.min(totalEmployeesPages, p + 1))}
+                          disabled={employeesPage === totalEmployeesPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
             </div>
           )}
         </CardContent>
@@ -746,27 +808,64 @@ export default function EmployeeManagement() {
                   Add
                 </Button>
               </div>
-              {blockedDates.length > 0 && (
-                <div className="space-y-2">
-                  {blockedDates.map((blocked, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border rounded">
-                      <div>
-                        <span className="text-sm font-medium">
-                          {new Date(blocked.date).toLocaleDateString()}
-                        </span>
-                        {blocked.reason && <span className="text-xs text-muted-foreground ml-2">{blocked.reason}</span>}
+              {blockedDates.length > 0 && (() => {
+                const totalBlockedDatesPages = Math.ceil(blockedDates.length / ITEMS_PER_PAGE)
+                const paginatedBlockedDates = blockedDates.slice(
+                  (blockedDatesPage - 1) * ITEMS_PER_PAGE,
+                  blockedDatesPage * ITEMS_PER_PAGE
+                )
+                return (
+                  <div className="space-y-2">
+                    {paginatedBlockedDates.map((blocked, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 border rounded">
+                        <div>
+                          <span className="text-sm font-medium">
+                            {new Date(blocked.date).toLocaleDateString()}
+                          </span>
+                          {blocked.reason && <span className="text-xs text-muted-foreground ml-2">{blocked.reason}</span>}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeBlockedDate(blocked.date)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeBlockedDate(blocked.date)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                    {totalBlockedDatesPages > 1 && (
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-xs text-muted-foreground">
+                          {blockedDates.length} blocked date{blockedDates.length !== 1 ? 's' : ''}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBlockedDatesPage(p => Math.max(1, p - 1))}
+                            disabled={blockedDatesPage === 1}
+                            className="h-7 w-7 p-0"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-xs px-2">
+                            {blockedDatesPage}/{totalBlockedDatesPages}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBlockedDatesPage(p => Math.min(totalBlockedDatesPages, p + 1))}
+                            disabled={blockedDatesPage === totalBlockedDatesPages}
+                            className="h-7 w-7 p-0"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Blocked Ranges */}
@@ -803,55 +902,131 @@ export default function EmployeeManagement() {
                   </Button>
                 </div>
               </div>
-              {blockedRanges.length > 0 && (
-                <div className="space-y-2">
-                  {blockedRanges.map((range, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border rounded">
-                      <div>
-                        <span className="text-sm font-medium">
-                          {new Date(range.startDate).toLocaleDateString()} - {new Date(range.endDate).toLocaleDateString()}
-                        </span>
-                        {range.reason && <span className="text-xs text-muted-foreground ml-2">{range.reason}</span>}
+              {blockedRanges.length > 0 && (() => {
+                const totalBlockedRangesPages = Math.ceil(blockedRanges.length / ITEMS_PER_PAGE)
+                const startIdx = (blockedRangesPage - 1) * ITEMS_PER_PAGE
+                const paginatedBlockedRanges = blockedRanges.slice(
+                  startIdx,
+                  startIdx + ITEMS_PER_PAGE
+                )
+                return (
+                  <div className="space-y-2">
+                    {paginatedBlockedRanges.map((range, index) => (
+                      <div key={startIdx + index} className="flex items-center justify-between p-2 border rounded">
+                        <div>
+                          <span className="text-sm font-medium">
+                            {new Date(range.startDate).toLocaleDateString()} - {new Date(range.endDate).toLocaleDateString()}
+                          </span>
+                          {range.reason && <span className="text-xs text-muted-foreground ml-2">{range.reason}</span>}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeBlockedRange(startIdx + index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeBlockedRange(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                    {totalBlockedRangesPages > 1 && (
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-xs text-muted-foreground">
+                          {blockedRanges.length} blocked range{blockedRanges.length !== 1 ? 's' : ''}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBlockedRangesPage(p => Math.max(1, p - 1))}
+                            disabled={blockedRangesPage === 1}
+                            className="h-7 w-7 p-0"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-xs px-2">
+                            {blockedRangesPage}/{totalBlockedRangesPages}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBlockedRangesPage(p => Math.min(totalBlockedRangesPages, p + 1))}
+                            disabled={blockedRangesPage === totalBlockedRangesPages}
+                            className="h-7 w-7 p-0"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Booking Blocked Ranges (read-only, auto-generated from active bookings) */}
-            {availabilityDialog?.bookingBlockedRanges && availabilityDialog.bookingBlockedRanges.length > 0 && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Blocked by Bookings (auto-generated)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  These dates are automatically blocked because the employee is assigned to active bookings.
-                </p>
+            {availabilityDialog?.bookingBlockedRanges && availabilityDialog.bookingBlockedRanges.length > 0 && (() => {
+              const bookingRanges = availabilityDialog.bookingBlockedRanges
+              const totalBookingRangesPages = Math.ceil(bookingRanges.length / ITEMS_PER_PAGE)
+              const paginatedBookingRanges = bookingRanges.slice(
+                (bookingBlockedRangesPage - 1) * ITEMS_PER_PAGE,
+                bookingBlockedRangesPage * ITEMS_PER_PAGE
+              )
+              return (
                 <div className="space-y-2">
-                  {availabilityDialog.bookingBlockedRanges.map((range, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border rounded bg-blue-50 border-blue-200">
-                      <div>
-                        <span className="text-sm font-medium text-blue-800">
-                          {new Date(range.startDate).toLocaleDateString()} - {new Date(range.endDate).toLocaleDateString()}
-                        </span>
-                        <span className="text-xs text-blue-600 ml-2">
-                          {range.reason === 'booking-buffer' ? 'Buffer period' : 'Booking'}
-                        </span>
+                  <Label className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Blocked by Bookings (auto-generated)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    These dates are automatically blocked because the employee is assigned to active bookings.
+                  </p>
+                  <div className="space-y-2">
+                    {paginatedBookingRanges.map((range, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 border rounded bg-blue-50 border-blue-200">
+                        <div>
+                          <span className="text-sm font-medium text-blue-800">
+                            {new Date(range.startDate).toLocaleDateString()} - {new Date(range.endDate).toLocaleDateString()}
+                          </span>
+                          <span className="text-xs text-blue-600 ml-2">
+                            {range.reason === 'booking-buffer' ? 'Buffer period' : 'Booking'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                    {totalBookingRangesPages > 1 && (
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-xs text-muted-foreground">
+                          {bookingRanges.length} booking block{bookingRanges.length !== 1 ? 's' : ''}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBookingBlockedRangesPage(p => Math.max(1, p - 1))}
+                            disabled={bookingBlockedRangesPage === 1}
+                            className="h-7 w-7 p-0"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-xs px-2">
+                            {bookingBlockedRangesPage}/{totalBookingRangesPages}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBookingBlockedRangesPage(p => Math.min(totalBookingRangesPages, p + 1))}
+                            disabled={bookingBlockedRangesPage === totalBookingRangesPages}
+                            className="h-7 w-7 p-0"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             <div className="flex justify-end gap-2 pt-4">
               <Button
