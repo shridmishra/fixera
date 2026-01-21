@@ -1011,8 +1011,8 @@ export default function EmployeeManagement() {
                     These dates are automatically blocked because the employee is assigned to active bookings.
                   </p>
                   <div className="space-y-2">
-                    {paginatedBookingRanges.map((range, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 border rounded bg-blue-50 border-blue-200">
+                    {paginatedBookingRanges.map((range) => (
+                      <div key={`${new Date(range.startDate).getTime()}-${new Date(range.endDate).getTime()}`} className="flex items-center justify-between p-2 border rounded bg-blue-50 border-blue-200">
                         <div>
                           <span className="text-sm font-medium text-blue-800">
                             {new Date(range.startDate).toLocaleDateString()} - {new Date(range.endDate).toLocaleDateString()}
