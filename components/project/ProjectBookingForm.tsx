@@ -2004,6 +2004,17 @@ export default function ProjectBookingForm({
       const startUtc = parseISO(proposals.shortestThroughputProposal.start);
       const endUtc = parseISO(proposals.shortestThroughputProposal.executionEnd);
 
+      // Validate parsed dates to avoid NaN in calculations
+      if (Number.isNaN(startUtc.getTime()) || Number.isNaN(endUtc.getTime())) {
+        console.warn('[shortestThroughputDetails] Invalid date parsed:', {
+          start: proposals.shortestThroughputProposal.start,
+          end: proposals.shortestThroughputProposal.executionEnd,
+          startValid: !Number.isNaN(startUtc.getTime()),
+          endValid: !Number.isNaN(endUtc.getTime()),
+        });
+        return { startDate: startUtc, endDate: endUtc, totalDays: 1 };
+      }
+
       // Use toZonedTime ONLY for calendar day calculations (not for display)
       // This ensures differenceInCalendarDays counts days in the professional's timezone
       const startZoned = toZonedTime(startUtc, tz);
@@ -2015,7 +2026,8 @@ export default function ProjectBookingForm({
       );
       // Return UTC dates - formatInTimeZone will convert them correctly for display
       return { startDate: startUtc, endDate: endUtc, totalDays };
-    } catch {
+    } catch (error) {
+      console.error('[shortestThroughputDetails] Error processing dates:', error);
       return null;
     }
   })();

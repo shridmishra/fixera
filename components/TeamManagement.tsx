@@ -73,10 +73,22 @@ interface Employee {
 }
 
 // Safe date formatting helper to handle invalid dates
+// Handles date-only strings (YYYY-MM-DD) as local dates to avoid timezone shift
 const formatDateSafe = (dateStr: string | undefined | null): string => {
   if (!dateStr) return 'Invalid Date';
   try {
-    const date = new Date(dateStr);
+    let date: Date;
+
+    // Check if it's a date-only string (YYYY-MM-DD) without time component
+    // These should be parsed as local dates to avoid UTC interpretation shifting the day
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      date = new Date(year, month - 1, day); // month is 0-indexed
+    } else {
+      // Full ISO timestamp or other format - parse normally
+      date = new Date(dateStr);
+    }
+
     if (isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleDateString();
   } catch {
