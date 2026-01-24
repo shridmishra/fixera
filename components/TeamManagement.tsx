@@ -379,12 +379,15 @@ export default function EmployeeManagement() {
       return d;
     }
     // Handle Date object - use local date formatting to avoid UTC shift
-    if (d instanceof Date && !isNaN(d.getTime())) {
+    if (d instanceof Date) {
+      // Handle invalid Date objects explicitly - return null if time is NaN
+      if (isNaN(d.getTime())) {
+        return null;
+      }
       return formatLocalDate(d);
     }
-    // Try to parse and use local date formatting
-    const parsed = new Date(d as unknown as string);
-    return isNaN(parsed.getTime()) ? null : formatLocalDate(parsed);
+    // All valid cases handled above; return null for any unexpected input
+    return null;
   };
 
   // Open availability dialog
