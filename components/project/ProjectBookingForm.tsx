@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -83,6 +83,11 @@ const isUnitBasedPriceModel = (priceModel?: string): boolean => {
   }
   return false;
 };
+
+// Multiplier for calculating throughput suggestion limit from execution days.
+// The limit is 2x execution days to allow reasonable scheduling flexibility
+// while still warning users about unusually long throughput windows.
+const THROUGHPUT_SUGGESTION_MULTIPLIER = 2;
 
 interface Project {
   _id: string;
@@ -241,6 +246,7 @@ interface AvailabilityResponse {
   blockedDates?: string[];
   blockedRanges?: BlockedRange[];
   resourcePolicy?: ResourcePolicy;
+  timezone?: string;
   _debug?: AvailabilityDebugInfo;
 }
 
@@ -279,6 +285,28 @@ const hasDurationRange = (
 ): duration is SubprojectExecutionDuration & {
   range: { min?: number; max?: number };
 } => Boolean(duration && 'range' in duration && duration.range);
+
+const convertDurationToDays = (
+  duration?: AnyExecutionDuration,
+  preferRange?: 'min' | 'max'
+) => {
+  if (!duration) return 0;
+  let value = duration.value;
+
+  if ((!value || value <= 0) && hasDurationRange(duration)) {
+    const { range } = duration;
+    if (preferRange === 'max' && range.max) {
+      value = range.max;
+    } else if (preferRange === 'min' && range.min) {
+      value = range.min;
+    } else {
+      value = range.max || range.min;
+    }
+  }
+
+  if (!value || value <= 0) return 0;
+  return duration.unit === 'days' ? value : value / 24;
+};
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -324,6 +352,7 @@ export default function ProjectBookingForm({
     scheduledBufferStartDate?: string;
     scheduledBufferEndDate?: string;
     scheduledBufferUnit?: string;
+    throughputDays?: number;
   } | null>(null);
   const [loadingScheduleWindow, setLoadingScheduleWindow] = useState(false);
   const [rfqAnswers, setRFQAnswers] = useState<RFQAnswer[]>([]);
@@ -358,6 +387,49 @@ export default function ProjectBookingForm({
     selectedPackage?.executionDuration?.unit ||
     project.executionDuration?.unit ||
     'days';
+  const professionalTz = normalizeTimezone(professionalTimezone);
+  // Formats DayPicker/local Date objects in local timezone (date-only value from the picker).
+  // Contrast with toLocalDateKeyFromInstant which uses professionalTz for real UTC instants.
+  const toLocalDateKey = useCallback(
+    (date: Date) => format(date, 'yyyy-MM-dd'),
+    []
+  );
+  // Instant key (treat Date as a real UTC instant from the backend)
+  const toLocalDateKeyFromInstant = (date: Date) =>
+    formatInTimeZone(date, professionalTz, 'yyyy-MM-dd');
+  const fromProfessionalDateKey = useCallback(
+    (dateKey: string) =>
+      fromZonedTime(`${dateKey}T00:00:00`, professionalTz),
+    [professionalTz]
+  );
+  const debugProjectId = isDev
+    ? process.env.NEXT_PUBLIC_DEBUG_PROJECT_ID?.trim()
+    : undefined;
+  const debugDateKeys = isDev
+    ? (process.env.NEXT_PUBLIC_DEBUG_DATE_KEYS ?? '')
+        .split(',')
+        .map((dateKey) => dateKey.trim())
+        .filter(Boolean)
+    : [];
+  const debugSignatureRef = useRef('');
+  const isDebugProject =
+    Boolean(debugProjectId) && String(project._id) === debugProjectId;
+  const debugLog = useMemo(
+    () => (isDebugProject ? console.log.bind(console) : undefined),
+    [isDebugProject]
+  );
+  const debugWarn = useMemo(
+    () => (isDebugProject ? console.warn.bind(console) : undefined),
+    [isDebugProject]
+  );
+  const debugError = useMemo(
+    () => (isDebugProject ? console.error.bind(console) : undefined),
+    [isDebugProject]
+  );
+  const debugTable = useMemo(
+    () => (isDebugProject ? console.table.bind(console) : undefined),
+    [isDebugProject]
+  );
 
   useEffect(() => {
     if (typeof selectedSubprojectIndex === 'number') {
@@ -375,11 +447,11 @@ export default function ProjectBookingForm({
     fetchProfessionalWorkingHours();
 
     // Log for debugging available date consistency
-    console.log(
+    debugLog?.(
       '[BOOKING FORM] Initializing booking form for project:',
       project._id
     );
-    console.log(
+    debugLog?.(
       '[BOOKING FORM] First available date from search/project page:',
       project.firstAvailableDate
     );
@@ -398,7 +470,7 @@ export default function ProjectBookingForm({
     if (!dateStr) return null;
     const parsed = parseISO(dateStr);
     if (Number.isNaN(parsed.getTime())) return null;
-    return format(parsed, 'yyyy-MM-dd');
+    return toLocalDateKeyFromInstant(parsed);
   };
 
   useEffect(() => {
@@ -426,10 +498,10 @@ export default function ProjectBookingForm({
     }
 
     if (!loadingAvailability && !loadingWorkingHours) {
-      console.log(
+      debugLog?.(
         '[BOOKING FORM] All data loaded, selecting default preferred start date...'
       );
-      console.log(
+      debugLog?.(
         '[BOOKING FORM] Professional availability:',
         professionalAvailability
       );
@@ -444,13 +516,13 @@ export default function ProjectBookingForm({
 
       if (earliestProposal && !isDateBlocked(earliestProposal)) {
         defaultDate = earliestProposal;
-        console.log(
+        debugLog?.(
           '[BOOKING FORM] Using earliest proposal date:',
           defaultDate
         );
       } else if (earliestBookable && !isDateBlocked(earliestBookable)) {
         defaultDate = earliestBookable;
-        console.log(
+        debugLog?.(
           '[BOOKING FORM] Using earliest bookable date:',
           defaultDate
         );
@@ -467,20 +539,20 @@ export default function ProjectBookingForm({
             'yyyy-MM-dd'
           );
           if (projectAvailableDate !== defaultDate) {
-            console.warn('[BOOKING FORM] Date discrepancy detected!');
-            console.warn(
+            debugWarn?.('[BOOKING FORM] Date discrepancy detected!');
+            debugWarn?.(
               '[BOOKING FORM] Search/Project page showed:',
               projectAvailableDate
             );
-            console.warn(
+            debugWarn?.(
               '[BOOKING FORM] Actual first available date:',
               defaultDate
             );
-            console.warn(
+            debugWarn?.(
               '[BOOKING FORM] This may be due to bookings made after viewing the search results'
             );
           } else {
-            console.log('[BOOKING FORM] Available dates match:', defaultDate);
+            debugLog?.('[BOOKING FORM] Available dates match:', defaultDate);
           }
         }
       }
@@ -534,7 +606,7 @@ export default function ProjectBookingForm({
       if (startTime) {
         url += `&startTime=${startTime}`;
       }
-      console.log('%c[SCHEDULE WINDOW] Fetching...', 'color: #ff6600; font-weight: bold', {
+      debugLog?.('%c[SCHEDULE WINDOW] Fetching...', 'color: #ff6600; font-weight: bold', {
         url,
         startDate,
         startTime,
@@ -542,26 +614,26 @@ export default function ProjectBookingForm({
       });
       const response = await fetch(url);
       const data = await response.json();
-      console.log('%c[SCHEDULE WINDOW] Response:', 'color: #ff6600; font-weight: bold', data);
+      debugLog?.('%c[SCHEDULE WINDOW] Response:', 'color: #ff6600; font-weight: bold', data);
       if (data.success && data.window) {
-        console.log('%c[SCHEDULE WINDOW] Setting scheduleWindow state:', 'color: #00cc00; font-weight: bold', data.window);
+        debugLog?.('%c[SCHEDULE WINDOW] Setting scheduleWindow state:', 'color: #00cc00; font-weight: bold', data.window);
         setScheduleWindow(data.window);
       } else {
-        console.warn('%c[SCHEDULE WINDOW] Not available:', 'color: #cc0000', data.error);
+        debugWarn?.('%c[SCHEDULE WINDOW] Not available:', 'color: #cc0000', data.error);
         setScheduleWindow(null);
       }
     } catch (error) {
-      console.error('%c[SCHEDULE WINDOW] Error:', 'color: #cc0000', error);
+      debugError?.('%c[SCHEDULE WINDOW] Error:', 'color: #cc0000', error);
       setScheduleWindow(null);
     } finally {
       setLoadingScheduleWindow(false);
-      console.log('[SCHEDULE WINDOW] Loading complete');
+      debugLog?.('[SCHEDULE WINDOW] Loading complete');
     }
   }, [project._id, selectedPackageIndex]);
 
   // Fetch schedule window from backend when date changes (for days mode)
   useEffect(() => {
-    console.log('[SCHEDULE WINDOW] useEffect triggered:', {
+    debugLog?.('[SCHEDULE WINDOW] useEffect triggered:', {
       selectedDate,
       projectMode,
       loadingAvailability,
@@ -569,7 +641,7 @@ export default function ProjectBookingForm({
       shouldFetch: selectedDate && projectMode === 'days' && !loadingAvailability
     });
     if (selectedDate && projectMode === 'days' && !loadingAvailability) {
-      console.log('[SCHEDULE WINDOW] Calling fetchScheduleWindow for date:', selectedDate);
+      debugLog?.('[SCHEDULE WINDOW] Calling fetchScheduleWindow for date:', selectedDate);
       setScheduleWindow(null);
       fetchScheduleWindow(selectedDate);
     }
@@ -577,7 +649,7 @@ export default function ProjectBookingForm({
 
   const fetchTeamAvailability = async (packageIndex?: number) => {
     try {
-      console.log(
+      debugLog?.(
         '[BOOKING] Fetching team availability for project:',
         project._id,
         'packageIndex:',
@@ -590,13 +662,13 @@ export default function ProjectBookingForm({
       const response = await fetch(url);
       const data: AvailabilityResponse = await response.json();
 
-      console.log('%c[AVAILABILITY API]', 'color: #00aa00; font-weight: bold', {
+      debugLog?.('%c[AVAILABILITY API]', 'color: #00aa00; font-weight: bold', {
         blockedDatesCount: data.blockedDates?.length || 0,
         blockedRangesCount: data.blockedRanges?.length || 0,
         resourcePolicy: data.resourcePolicy,
       });
       if (isDev && data._debug) {
-        console.log(
+        debugLog?.(
           '%c[AVAILABILITY DEBUG]',
           'color: #00aa00; font-weight: bold',
           {
@@ -610,17 +682,17 @@ export default function ProjectBookingForm({
             useWindowBasedCheck: data._debug?.useWindowBasedCheck,
           }
         );
-        console.log(
+        debugLog?.(
           '%c[TEAM MEMBERS]',
           'color: #ff6600; font-weight: bold',
           data._debug?.teamMembers
         );
-        console.log(
+        debugLog?.(
           '%c[BOOKINGS BLOCKING TEAM]',
           'color: #cc0000; font-weight: bold',
           data._debug?.bookings
         );
-        console.log(
+        debugLog?.(
           '%c[DATES WITH BLOCKED MEMBERS]',
           'color: #9900cc; font-weight: bold',
           data._debug?.dateBlockedMembers
@@ -628,10 +700,16 @@ export default function ProjectBookingForm({
       }
 
       if (data.success) {
+        const availabilityTz = normalizeTimezone(
+          data.timezone || professionalTimezone || professionalTz
+        );
+        if (!professionalTimezone || professionalTimezone !== availabilityTz) {
+          setProfessionalTimezone(availabilityTz);
+        }
         // Normalize dates to yyyy-MM-dd format
         const normalizedData: BlockedDates = {
           blockedDates: (data.blockedDates || []).map((d: string) =>
-            format(parseISO(d), 'yyyy-MM-dd')
+            formatInTimeZone(parseISO(d), availabilityTz, 'yyyy-MM-dd')
           ),
           blockedRanges: (data.blockedRanges || []).map(
             (range: BlockedRange) => ({
@@ -642,12 +720,12 @@ export default function ProjectBookingForm({
           ),
           resourcePolicy: data.resourcePolicy,
         };
-        console.log('[BOOKING] Normalized data:', normalizedData);
-        console.log('[BOOKING] Resource policy:', data.resourcePolicy);
+        debugLog?.('[BOOKING] Normalized data:', normalizedData);
+        debugLog?.('[BOOKING] Resource policy:', data.resourcePolicy);
         setBlockedDates(normalizedData);
       }
     } catch (error) {
-      console.error('Error fetching availability:', error);
+      debugError?.('Error fetching availability:', error);
       toast.error('Failed to load availability calendar');
     } finally {
       setLoadingAvailability(false);
@@ -665,14 +743,14 @@ export default function ProjectBookingForm({
       const data: ScheduleProposalsResponse = await response.json();
 
       if (isDev) {
-        console.log('%c[PROPOSALS API]', 'color: #0066cc; font-weight: bold', {
+        debugLog?.('%c[PROPOSALS API]', 'color: #0066cc; font-weight: bold', {
           earliestBookableDate: data.proposals?.earliestBookableDate,
           earliestProposal: data.proposals?.earliestProposal,
           mode: data.proposals?.mode,
           _debug: data.proposals?._debug,
         });
         if (data.proposals?._debug) {
-          console.log(
+          debugLog?.(
             '%c[PROPOSALS DEBUG]',
             'color: #0066cc',
             data.proposals._debug
@@ -683,35 +761,35 @@ export default function ProjectBookingForm({
         setProposals(data.proposals);
       }
     } catch (error) {
-      console.error('Error fetching schedule proposals:', error);
+      debugError?.('Error fetching schedule proposals:', error);
     }
   };
 
   const fetchProfessionalWorkingHours = async () => {
     try {
-      console.log('[BOOKING] Fetching working hours for project:', project._id);
+      debugLog?.('[BOOKING] Fetching working hours for project:', project._id);
       setLoadingWorkingHours(true);
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/projects/${project._id}/working-hours`
       );
       const data: WorkingHoursResponse = await response.json();
 
-      console.log('[BOOKING] Working hours response:', data);
+      debugLog?.('[BOOKING] Working hours response:', data);
       if (data.success && data.availability) {
-        console.log(
+        debugLog?.(
           '[BOOKING] Professional availability set:',
           data.availability
         );
-        console.log('[BOOKING] Professional timezone:', data.timezone);
+        debugLog?.('[BOOKING] Professional timezone:', data.timezone);
         setProfessionalAvailability(data.availability);
         setProfessionalTimezone(normalizeTimezone(data.timezone));
       } else {
-        console.warn(
+        debugWarn?.(
           '[BOOKING] No working hours data received or request failed'
         );
       }
     } catch (error) {
-      console.error(
+      debugError?.(
         '[BOOKING] Error fetching professional working hours:',
         error
       );
@@ -767,7 +845,7 @@ export default function ProjectBookingForm({
     let countedDays = 0;
 
     // First, check if startDate itself is a working day and count it
-    const startStr = format(startDate, 'yyyy-MM-dd');
+    const startStr = toLocalDateKey(startDate);
     if (isProfessionalWorkingDay(startDate) && !isDateBlocked(startStr)) {
       countedDays = 1;
     }
@@ -775,7 +853,7 @@ export default function ProjectBookingForm({
     // Now find remaining working days
     while (countedDays < workingDays) {
       cursor = addDays(cursor, 1);
-      const cursorStr = format(cursor, 'yyyy-MM-dd');
+      const cursorStr = toLocalDateKey(cursor);
 
       if (isProfessionalWorkingDay(cursor) && !isDateBlocked(cursorStr)) {
         countedDays++;
@@ -786,20 +864,27 @@ export default function ProjectBookingForm({
   };
 
   // Check if a date is a weekend (Saturday or Sunday)
-  const isWeekend = (date: Date): boolean => {
-    const day = date.getDay();
-    return day === 0 || day === 6; // Sunday = 0, Saturday = 6
-  };
+  const isWeekend = useCallback((date: Date): boolean => {
+    try {
+      const dateStr = toLocalDateKey(date);
+      const dayStartUtc = fromZonedTime(`${dateStr}T00:00:00`, professionalTz);
+      const weekday = formatInTimeZone(dayStartUtc, professionalTz, 'eeee').toLowerCase();
+      return weekday === 'saturday' || weekday === 'sunday';
+    } catch {
+      const day = date.getDay();
+      return day === 0 || day === 6;
+    }
+  }, [professionalTz, toLocalDateKey]);
 
   // Check if professional works on this date (based on their availability)
-  const isProfessionalWorkingDay = (date: Date): boolean => {
+  const isProfessionalWorkingDay = useCallback((date: Date): boolean => {
     if (!professionalAvailability) {
       // This should only happen during initial load before working hours are fetched
-      console.warn(
+      debugWarn?.(
         '[BOOKING] ⚠️ isProfessionalWorkingDay called before working hours loaded! Date:',
-        format(date, 'yyyy-MM-dd')
+        toLocalDateKey(date)
       );
-      console.warn(
+      debugWarn?.(
         '[BOOKING] Loading states - availability:',
         loadingAvailability,
         'workingHours:',
@@ -808,52 +893,80 @@ export default function ProjectBookingForm({
       return true; // Default to available while loading
     }
 
-    const dayNames = [
-      'sunday',
-      'monday',
-      'tuesday',
-      'wednesday',
-      'thursday',
-      'friday',
-      'saturday',
-    ];
-    const dayName = dayNames[date.getDay()] as keyof ProfessionalAvailability;
-    const dayAvailability = professionalAvailability[dayName];
+    try {
+      const dateStr = toLocalDateKey(date);
+      const dayStartUtc = fromZonedTime(`${dateStr}T00:00:00`, professionalTz);
+      const weekday = formatInTimeZone(dayStartUtc, professionalTz, 'eeee').toLowerCase() as keyof ProfessionalAvailability;
+      const dayAvailability = professionalAvailability[weekday];
 
-    if (!dayAvailability) {
+      if (!dayAvailability) {
+        return true;
+      }
+
+      if (typeof dayAvailability.available === 'boolean') {
+        return dayAvailability.available;
+      }
+
+      if (dayAvailability.startTime || dayAvailability.endTime) {
+        return true;
+      }
+
       return true;
+    } catch (error) {
+      debugWarn?.('[BOOKING] Failed to evaluate working day with timezone:', {
+        error,
+        timezone: professionalTz,
+        date: toLocalDateKey(date),
+      });
+      const dayNames = [
+        'sunday',
+        'monday',
+        'tuesday',
+        'wednesday',
+        'thursday',
+        'friday',
+        'saturday',
+      ];
+      const dayName = dayNames[date.getDay()] as keyof ProfessionalAvailability;
+      const fallbackAvailability = professionalAvailability[dayName];
+      return fallbackAvailability?.available !== false;
     }
-
-    if (typeof dayAvailability.available === 'boolean') {
-      return dayAvailability.available;
-    }
-
-    if (dayAvailability.startTime || dayAvailability.endTime) {
-      return true;
-    }
-
-    return true;
-  };
+  }, [
+    debugWarn,
+    loadingAvailability,
+    loadingWorkingHours,
+    professionalAvailability,
+    professionalTz,
+    toLocalDateKey,
+  ]);
 
   // Get working hours for the selected date
-  const getWorkingHoursForDate = (
+  const getWorkingHoursForDate = useCallback((
     date: Date
   ): { startTime: string; endTime: string } => {
     const defaultHours = { startTime: '09:00', endTime: '17:00' };
 
     if (!professionalAvailability) return defaultHours;
 
-    const dayNames = [
-      'sunday',
-      'monday',
-      'tuesday',
-      'wednesday',
-      'thursday',
-      'friday',
-      'saturday',
-    ];
-    const dayName = dayNames[date.getDay()] as keyof ProfessionalAvailability;
-    const dayAvailability = professionalAvailability[dayName];
+    let dayAvailability: ProfessionalAvailability[keyof ProfessionalAvailability] | undefined;
+    try {
+      const dateStr = toLocalDateKey(date);
+      const dayStartUtc = fromZonedTime(`${dateStr}T00:00:00`, professionalTz);
+      const weekday = formatInTimeZone(dayStartUtc, professionalTz, 'eeee').toLowerCase() as keyof ProfessionalAvailability;
+      dayAvailability = professionalAvailability[weekday];
+    } catch {
+      const dayNames = [
+        'sunday',
+        'monday',
+        'tuesday',
+        'wednesday',
+        'thursday',
+        'friday',
+        'saturday',
+      ];
+      const dayName = dayNames[date.getDay()] as keyof ProfessionalAvailability;
+      dayAvailability = professionalAvailability[dayName];
+    }
 
     if (!dayAvailability || !dayAvailability.available) return defaultHours;
 
@@ -861,7 +974,7 @@ export default function ProjectBookingForm({
       startTime: dayAvailability.startTime || '09:00',
       endTime: dayAvailability.endTime || '17:00',
     };
-  };
+  }, [professionalAvailability, professionalTz, toLocalDateKey]);
 
   const getExecutionDurationHours = (): number => {
     const executionSource: AnyExecutionDuration | undefined =
@@ -878,7 +991,7 @@ export default function ProjectBookingForm({
     return (executionSource.value || 0) * 24;
   };
 
-  const adjustRangeEndForMidnightUtc = (
+  const adjustRangeEndForMidnightUtc = useCallback((
     rangeEnd: Date,
     targetDate: Date,
     tz: string,
@@ -900,15 +1013,19 @@ export default function ProjectBookingForm({
       return rangeEnd;
     }
 
-    return dayEndOverride || addDays(startOfDay(targetDate), 1);
-  };
+    if (dayEndOverride) {
+      return dayEndOverride;
+    }
+    const targetDateKey = toLocalDateKey(targetDate);
+    return addDays(fromProfessionalDateKey(targetDateKey), 1);
+  }, [fromProfessionalDateKey, toLocalDateKey]);
 
-  const getBlockedIntervalsForDate = (date: Date) => {
+  const getBlockedIntervalsForDate = useCallback((date: Date) => {
     const intervals: Array<{ start: Date; end: Date }> = [];
-    const dayStart = startOfDay(date);
+    const dateKey = toLocalDateKey(date);
+    const dayStart = fromProfessionalDateKey(dateKey);
     const dayEnd = addDays(dayStart, 1);
-    const dateKey = format(dayStart, 'yyyy-MM-dd');
-    const tz = normalizeTimezone(professionalTimezone);
+    const tz = professionalTz;
 
     if (blockedDates.blockedDates.includes(dateKey)) {
       intervals.push({ start: dayStart, end: dayEnd });
@@ -941,29 +1058,31 @@ export default function ProjectBookingForm({
     });
 
     return intervals;
-  };
+  }, [
+    adjustRangeEndForMidnightUtc,
+    blockedDates.blockedDates,
+    blockedDates.blockedRanges,
+    fromProfessionalDateKey,
+    professionalTz,
+    toLocalDateKey,
+  ]);
 
-  const shouldBlockDayForIntervals = (
+  const computeBlockedHoursForIntervals = useCallback((
     date: Date,
     intervals: Array<{ start: Date; end: Date }>
   ) => {
-    if (intervals.length === 0) {
-      return false;
-    }
-
     const { startTime, endTime } = getWorkingHoursForDate(date);
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
-    const dayEnd = addDays(startOfDay(date), 1);
-
-    // Create working hours in professional's timezone, then convert to UTC for comparison
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const tz = normalizeTimezone(professionalTimezone);
+    const dateStr = toLocalDateKey(date);
+    const dayEnd = addDays(fromProfessionalDateKey(dateStr), 1);
+    const tz = professionalTz;
     const workingStart = fromZonedTime(`${dateStr}T${startTime}:00`, tz);
     const workingEnd = fromZonedTime(`${dateStr}T${endTime}:00`, tz);
 
-    if (workingEnd <= workingStart) {
-      return true;
+    const workingHours =
+      (workingEnd.getTime() - workingStart.getTime()) / (1000 * 60 * 60);
+
+    if (workingEnd <= workingStart || !Number.isFinite(workingHours)) {
+      return { blockedHours: Number.POSITIVE_INFINITY, workingHours: 0 };
     }
 
     const clamped = intervals
@@ -974,10 +1093,7 @@ export default function ProjectBookingForm({
           tz,
           dayEnd
         ).getTime();
-        const start = Math.max(
-          interval.start.getTime(),
-          workingStart.getTime()
-        );
+        const start = Math.max(interval.start.getTime(), workingStart.getTime());
         const end = Math.min(intervalEnd, workingEnd.getTime());
         return { start, end };
       })
@@ -985,7 +1101,7 @@ export default function ProjectBookingForm({
       .sort((a, b) => a.start - b.start);
 
     if (clamped.length === 0) {
-      return false;
+      return { blockedHours: 0, workingHours };
     }
 
     let totalMinutes = 0;
@@ -1005,8 +1121,26 @@ export default function ProjectBookingForm({
 
     totalMinutes += (currentEnd - currentStart) / (1000 * 60);
 
+    return { blockedHours: totalMinutes / 60, workingHours };
+  }, [
+    adjustRangeEndForMidnightUtc,
+    fromProfessionalDateKey,
+    getWorkingHoursForDate,
+    professionalTz,
+    toLocalDateKey,
+  ]);
+
+  const shouldBlockDayForIntervals = (
+    date: Date,
+    intervals: Array<{ start: Date; end: Date }>
+  ) => {
+    if (intervals.length === 0) {
+      return false;
+    }
+
+    const { blockedHours } = computeBlockedHoursForIntervals(date, intervals);
     // Block the day if 4 or more hours are blocked (matches backend logic)
-    return totalMinutes / 60 >= PARTIAL_BLOCK_THRESHOLD_HOURS;
+    return blockedHours >= PARTIAL_BLOCK_THRESHOLD_HOURS;
   };
 
   const windowOverlapsBlockedRanges = (
@@ -1016,8 +1150,9 @@ export default function ProjectBookingForm({
     if (windowEnd <= windowStart) {
       return false;
     }
-    const tz = normalizeTimezone(professionalTimezone);
-    const dayEnd = addDays(startOfDay(windowStart), 1);
+    const tz = professionalTz;
+    const startKey = toLocalDateKey(windowStart);
+    const dayEnd = addDays(fromProfessionalDateKey(startKey), 1);
 
     return blockedDates.blockedRanges.some((range) => {
       const rangeStart = parseISO(range.startDate);
@@ -1043,7 +1178,7 @@ export default function ProjectBookingForm({
       return true;
     }
 
-    const dateKey = format(date, 'yyyy-MM-dd');
+    const dateKey = toLocalDateKey(date);
     if (blockedDates.blockedDates.includes(dateKey)) {
       return true;
     }
@@ -1059,7 +1194,7 @@ export default function ProjectBookingForm({
 
     while (remainingMinutes > 0 && iterations < maxIterations) {
       iterations += 1;
-      const dayStart = startOfDay(cursor);
+      const dayStart = fromProfessionalDateKey(toLocalDateKey(cursor));
       if (isBufferDayBlocked(dayStart)) {
         cursor = addDays(dayStart, 1);
         continue;
@@ -1106,7 +1241,7 @@ export default function ProjectBookingForm({
       cursor = addDays(dayStart, 1);
     }
 
-    console.warn(
+    debugWarn?.(
       '[addWorkingHoursForBuffer] Max iterations reached; buffer end may be inaccurate'
     );
     return cursor;
@@ -1137,7 +1272,7 @@ export default function ProjectBookingForm({
     }
 
     if (iterations >= maxIterations) {
-      console.warn(
+      debugWarn?.(
         '[advanceWorkingDaysForBuffer] Max iterations reached; buffer end may be inaccurate'
       );
     }
@@ -1201,7 +1336,7 @@ export default function ProjectBookingForm({
     // If execution time exceeds one working day, return empty array
     // This indicates the project should be in days mode instead
     if (executionHours > workingHoursPerDay) {
-      console.warn(
+      debugWarn?.(
         `Execution time (${executionHours}h) exceeds working hours per day (${workingHoursPerDay}h). This project should use days mode.`
       );
       return [];
@@ -1220,14 +1355,14 @@ export default function ProjectBookingForm({
 
     // Check if date is today - if so, we need to filter out past slots
     const now = new Date();
-    const isToday = startOfDay(date).getTime() === startOfDay(now).getTime();
+    const isToday = toLocalDateKey(date) === toLocalDateKey(now);
 
     // Generate slots from start to last available slot
     let currentMinutes = startHour * 60 + startMin;
 
     // Get date string for constructing timezone-aware times
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const tz = normalizeTimezone(professionalTimezone);
+    const dateStr = toLocalDateKey(date);
+    const tz = professionalTz;
 
     while (currentMinutes <= lastSlotMinutes) {
       const hours = Math.floor(currentMinutes / 60);
@@ -1399,7 +1534,7 @@ export default function ProjectBookingForm({
         professional: professionalTime,
       };
     } catch (error) {
-      console.error('Error converting timezone:', error);
+      debugError?.('Error converting timezone:', error);
       return { utc: timeSlot, viewer: timeSlot, professional: timeSlot };
     }
   };
@@ -1431,10 +1566,13 @@ export default function ProjectBookingForm({
   };
 
   const isDateBlocked = (dateString: string): boolean => {
-    const dateObj = parseISO(dateString);
-    if (Number.isNaN(dateObj.getTime())) {
+    let dateObj: Date;
+    try {
+      dateObj = fromProfessionalDateKey(dateString);
+    } catch {
       return true;
     }
+    if (Number.isNaN(dateObj.getTime())) return true;
 
     if (projectMode === 'hours') {
       return generateTimeSlotsForDate(dateObj).length === 0;
@@ -1449,24 +1587,91 @@ export default function ProjectBookingForm({
     return shouldBlockDayForIntervals(dateObj, intervals);
   };
 
+  useEffect(() => {
+    if (!isDebugProject) {
+      return;
+    }
+    if (loadingAvailability || loadingWorkingHours || !professionalAvailability) {
+      return;
+    }
+
+    const signature = JSON.stringify({
+      tz: professionalTz,
+      blockedDates: blockedDates.blockedDates,
+      blockedRangesCount: blockedDates.blockedRanges.length,
+      hasAvailability: Boolean(professionalAvailability),
+    });
+    if (debugSignatureRef.current === signature) {
+      return;
+    }
+    debugSignatureRef.current = signature;
+
+    const debugSummary = debugDateKeys.map((dateKey) => {
+      const dateObj = fromProfessionalDateKey(dateKey);
+      const isWorking = isProfessionalWorkingDay(dateObj) && !isWeekend(dateObj);
+      const explicitBlocked = blockedDates.blockedDates.includes(dateKey);
+      const intervals = getBlockedIntervalsForDate(dateObj);
+      const { blockedHours, workingHours } = computeBlockedHoursForIntervals(
+        dateObj,
+        intervals
+      );
+      const blockedByRanges = blockedHours >= PARTIAL_BLOCK_THRESHOLD_HOURS;
+      const finalBlocked = explicitBlocked || blockedByRanges;
+
+      return {
+        dateKey,
+        isWorking,
+        explicitBlocked,
+        intervalsCount: intervals.length,
+        blockedHours: Number.isFinite(blockedHours)
+          ? blockedHours.toFixed(2)
+          : String(blockedHours),
+        workingHours: Number.isFinite(workingHours)
+          ? workingHours.toFixed(2)
+          : String(workingHours),
+        blockedByRanges,
+        finalBlocked,
+      };
+    });
+
+    debugLog?.('[BOOKING DEBUG] Professional TZ:', professionalTz);
+    debugLog?.(
+      '[BOOKING DEBUG] Explicit blockedDates:',
+      blockedDates.blockedDates
+    );
+    debugTable?.(debugSummary);
+  }, [
+    computeBlockedHoursForIntervals,
+    debugDateKeys,
+    debugLog,
+    debugTable,
+    fromProfessionalDateKey,
+    getBlockedIntervalsForDate,
+    isDebugProject,
+    isProfessionalWorkingDay,
+    isWeekend,
+    loadingAvailability,
+    loadingWorkingHours,
+    professionalAvailability,
+    professionalTz,
+    blockedDates,
+    PARTIAL_BLOCK_THRESHOLD_HOURS,
+    project._id,
+  ]);
+
   const getDisabledDays = () => {
     const disabledMatchers: Array<
       Date | { from: Date; to: Date } | ((date: Date) => boolean)
     > = [];
-
-    blockedDates.blockedDates.forEach((dateStr) => {
-      disabledMatchers.push(parseISO(dateStr));
-    });
 
     // For days mode, use a function matcher that applies the 4-hour threshold
     // instead of disabling entire ranges
     if (projectMode !== 'hours') {
       // Create a function matcher that checks each day using the 4-hour threshold
       const rangeBlockMatcher = (date: Date) => {
-        const dateStr = format(date, 'yyyy-MM-dd');
-        // Already handled by explicit blocked dates
-        if (blockedDates.blockedDates.includes(dateStr)) {
-          return false; // Already disabled above
+        const dateKey = toLocalDateKey(date);
+        if (blockedDates.blockedDates.includes(dateKey)) {
+          return true;
         }
 
         const intervals = getBlockedIntervalsForDate(date);
@@ -1489,9 +1694,9 @@ export default function ProjectBookingForm({
   };
 
   const getMinDate = (): string | null => {
-    console.log('[getMinDate] Starting calculation...');
-    console.log('[getMinDate] Project timeMode:', projectMode);
-    console.log(
+    debugLog?.('[getMinDate] Starting calculation...');
+    debugLog?.('[getMinDate] Project timeMode:', projectMode);
+    debugLog?.(
       '[getMinDate] Proposals earliestBookableDate:',
       proposals?.earliestBookableDate
     );
@@ -1500,17 +1705,18 @@ export default function ProjectBookingForm({
       ? parseISO(proposals.earliestBookableDate)
       : addDays(new Date(), 1);
 
-    console.log('[getMinDate] Starting from:', format(earliest, 'yyyy-MM-dd'));
+    const earliestKey = proposals?.earliestBookableDate
+      ? toLocalDateKeyFromInstant(earliest)
+      : toLocalDateKey(earliest);
+    debugLog?.('[getMinDate] Starting from:', earliestKey);
 
-    let checkDate = startOfDay(earliest);
+    let checkDate = fromProfessionalDateKey(earliestKey);
 
     for (let i = 0; i < 120; i++) {
       const isWorkingDay = isProfessionalWorkingDay(checkDate);
-      console.log(
-        `[getMinDate] Checking ${format(
-          checkDate,
-          'yyyy-MM-dd'
-        )} - Working day: ${isWorkingDay}`
+      const dateStr = toLocalDateKey(checkDate);
+      debugLog?.(
+        `[getMinDate] Checking ${dateStr} - Working day: ${isWorkingDay}`
       );
 
       if (!isWorkingDay) {
@@ -1518,20 +1724,18 @@ export default function ProjectBookingForm({
         continue;
       }
 
-      const dateStr = format(checkDate, 'yyyy-MM-dd');
-
       if (projectMode === 'hours') {
         const slots = generateTimeSlotsForDate(checkDate);
-        console.log(`[getMinDate] ${dateStr} - Available slots:`, slots.length);
+        debugLog?.(`[getMinDate] ${dateStr} - Available slots:`, slots.length);
         if (slots.length > 0) {
-          console.log(`[getMinDate] ✅ Found first available date: ${dateStr}`);
+          debugLog?.(`[getMinDate] ✅ Found first available date: ${dateStr}`);
           return dateStr;
         }
       } else {
         const blocked = isDateBlocked(dateStr);
-        console.log(`[getMinDate] ${dateStr} - Blocked: ${blocked}`);
+        debugLog?.(`[getMinDate] ${dateStr} - Blocked: ${blocked}`);
         if (!blocked) {
-          console.log(`[getMinDate] ✅ Found first available date: ${dateStr}`);
+          debugLog?.(`[getMinDate] ✅ Found first available date: ${dateStr}`);
           return dateStr;
         }
       }
@@ -1539,30 +1743,8 @@ export default function ProjectBookingForm({
       checkDate = addDays(checkDate, 1);
     }
 
-    console.warn('[getMinDate] ⚠️ No available date found in 120 days!');
+    debugWarn?.('[getMinDate] ⚠️ No available date found in 120 days!');
     return null;
-  };
-
-  const convertDurationToDays = (
-    duration?: AnyExecutionDuration,
-    preferRange?: 'min' | 'max'
-  ) => {
-    if (!duration) return 0;
-    let value = duration.value;
-
-    if ((!value || value <= 0) && hasDurationRange(duration)) {
-      const { range } = duration;
-      if (preferRange === 'max' && range.max) {
-        value = range.max;
-      } else if (preferRange === 'min' && range.min) {
-        value = range.min;
-      } else {
-        value = range.max || range.min;
-      }
-    }
-
-    if (!value || value <= 0) return 0;
-    return duration.unit === 'days' ? value : value / 24;
   };
 
   const calculateCompletionDate = (includeBuffer = false): Date | null => {
@@ -1757,20 +1939,20 @@ export default function ProjectBookingForm({
   };
 
   const handleSubmit = async () => {
-    console.log('[BOOKING] Submit initiated');
-    console.log('[BOOKING] Current step:', currentStep);
-    console.log('[BOOKING] Selected package index:', selectedPackageIndex);
-    console.log('[BOOKING] Selected date:', selectedDate);
+    debugLog?.('[BOOKING] Submit initiated');
+    debugLog?.('[BOOKING] Current step:', currentStep);
+    debugLog?.('[BOOKING] Selected package index:', selectedPackageIndex);
+    debugLog?.('[BOOKING] Selected date:', selectedDate);
 
     if (!guardOutsideServiceArea()) {
-      console.error(
+      debugError?.(
         '[BOOKING] Submission blocked due to service radius limits'
       );
       return;
     }
 
     if (!validateStep()) {
-      console.error('[BOOKING] Validation failed');
+      debugError?.('[BOOKING] Validation failed');
       return;
     }
 
@@ -1779,7 +1961,7 @@ export default function ProjectBookingForm({
       return;
     }
 
-    console.log('[BOOKING] Validation passed');
+    debugLog?.('[BOOKING] Validation passed');
     setLoading(true);
 
     try {
@@ -1822,19 +2004,19 @@ export default function ProjectBookingForm({
         urgency: 'medium',
       };
 
-      console.log('[BOOKING] Prepared booking data:', bookingData);
-      console.log(
+      debugLog?.('[BOOKING] Prepared booking data:', bookingData);
+      debugLog?.(
         '[BOOKING] Backend URL:',
         process.env.NEXT_PUBLIC_BACKEND_URL
       );
-      console.log('[BOOKING] Sending request...');
+      debugLog?.('[BOOKING] Sending request...');
 
       const startTime = Date.now();
 
       // Create abort controller for timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.error('[BOOKING] Request timeout after 30 seconds');
+        debugError?.('[BOOKING] Request timeout after 30 seconds');
         controller.abort();
       }, 30000); // 30 second timeout
 
@@ -1855,12 +2037,12 @@ export default function ProjectBookingForm({
         clearTimeout(timeoutId); // Clear timeout if request completes
 
         const requestTime = Date.now() - startTime;
-        console.log(`[BOOKING] Response received in ${requestTime}ms`);
-        console.log('[BOOKING] Response status:', response.status);
-        console.log('[BOOKING] Response ok:', response.ok);
+        debugLog?.(`[BOOKING] Response received in ${requestTime}ms`);
+        debugLog?.('[BOOKING] Response status:', response.status);
+        debugLog?.('[BOOKING] Response ok:', response.ok);
 
         const data = await response.json();
-        console.log('[BOOKING] Response data:', data);
+        debugLog?.('[BOOKING] Response data:', data);
 
         if (response.ok && data.success) {
           // Check if project has post-booking questions
@@ -1878,33 +2060,33 @@ export default function ProjectBookingForm({
           }
           return;
         } else {
-          console.error('[BOOKING] Request failed');
-          console.error('[BOOKING] Status:', response.status);
-          console.error('[BOOKING] Error message:', data.msg || data.message);
-          console.error('[BOOKING] Full response:', data);
+          debugError?.('[BOOKING] Request failed');
+          debugError?.('[BOOKING] Status:', response.status);
+          debugError?.('[BOOKING] Error message:', data.msg || data.message);
+          debugError?.('[BOOKING] Full response:', data);
 
           // Handle specific error cases
           if (response.status === 401) {
-            console.error('[BOOKING] Not authenticated');
+            debugError?.('[BOOKING] Not authenticated');
             toast.error('Please log in to submit a booking request');
             setTimeout(() => {
               router.push('/login?redirect=/projects/' + project._id);
             }, 1500);
           } else if (response.status === 403) {
-            console.error('[BOOKING] Permission denied');
+            debugError?.('[BOOKING] Permission denied');
             toast.error(
               data.msg || 'You do not have permission to create bookings'
             );
           } else if (response.status === 400) {
-            console.error('[BOOKING] Bad request - validation error');
+            debugError?.('[BOOKING] Bad request - validation error');
             toast.error(
               data.msg || 'Please check your booking details and try again'
             );
           } else if (response.status === 404) {
-            console.error('[BOOKING] Resource not found');
+            debugError?.('[BOOKING] Resource not found');
             toast.error(data.msg || 'Project not found');
           } else {
-            console.error('[BOOKING] Unknown error status:', response.status);
+            debugError?.('[BOOKING] Unknown error status:', response.status);
             toast.error(
               data.msg ||
                 data.message ||
@@ -1916,7 +2098,7 @@ export default function ProjectBookingForm({
         clearTimeout(timeoutId);
 
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          console.error('[BOOKING] Request was aborted (timeout)');
+          debugError?.('[BOOKING] Request was aborted (timeout)');
           toast.error(
             'Request timed out. The server is taking too long to respond. Please try again.'
           );
@@ -1925,27 +2107,27 @@ export default function ProjectBookingForm({
         }
       }
     } catch (error: unknown) {
-      console.error('[BOOKING] Exception thrown');
+      debugError?.('[BOOKING] Exception thrown');
       const err = error instanceof Error ? error : new Error('Unknown error');
-      console.error('[BOOKING] Error name:', err.name);
-      console.error('[BOOKING] Error message:', err.message);
-      console.error('[BOOKING] Error stack:', err.stack);
+      debugError?.('[BOOKING] Error name:', err.name);
+      debugError?.('[BOOKING] Error message:', err.message);
+      debugError?.('[BOOKING] Error stack:', err.stack);
 
       // Network or other errors
       if (err.name === 'TypeError' && err.message.includes('fetch')) {
-        console.error('[BOOKING] Network/fetch error');
+        debugError?.('[BOOKING] Network/fetch error');
         toast.error(
           'Network error. Please check your connection and try again.'
         );
       } else if (err.name === 'AbortError') {
-        console.error('[BOOKING] Request timeout');
+        debugError?.('[BOOKING] Request timeout');
         toast.error('Request timed out. Please try again.');
       } else {
-        console.error('[BOOKING] Unexpected error type');
+        debugError?.('[BOOKING] Unexpected error type');
         toast.error('An unexpected error occurred. Please try again.');
       }
     } finally {
-      console.log('[BOOKING] Request completed, resetting loading state');
+      debugLog?.('[BOOKING] Request completed, resetting loading state');
       setLoading(false);
     }
   };
@@ -2001,9 +2183,120 @@ export default function ProjectBookingForm({
     }
     return parsed;
   })();
+  const throughputSuggestion = useMemo(() => {
+    if (projectMode !== 'days' || !selectedDate || !professionalAvailability) {
+      return null;
+    }
+
+    const executionSource: AnyExecutionDuration | undefined =
+      selectedPackage?.executionDuration || project.executionDuration;
+    const preferRange =
+      selectedPackage?.pricing.type === 'rfq' ? 'max' : undefined;
+    const executionDays = Math.ceil(
+      convertDurationToDays(executionSource, preferRange)
+    );
+    if (!executionDays || executionDays <= 0) {
+      return null;
+    }
+
+    if (!scheduleWindowCompletionDate) {
+      return null;
+    }
+    const executionEndUtc = scheduleWindowCompletionDate;
+
+    const endDateStrInProfessionalTz = formatInTimeZone(
+      executionEndUtc,
+      professionalTz,
+      'yyyy-MM-dd'
+    );
+
+    const dayNames: Array<keyof ProfessionalAvailability> = [
+      'sunday',
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+    ];
+
+    const getWeekdayKey = (dateStr: string): keyof ProfessionalAvailability => {
+      const dayStartUtc = fromZonedTime(`${dateStr}T00:00:00`, professionalTz);
+      const weekdayName = formatInTimeZone(dayStartUtc, professionalTz, 'eeee').toLowerCase();
+      const index = dayNames.indexOf(
+        weekdayName as keyof ProfessionalAvailability
+      );
+      return index >= 0 ? dayNames[index] : 'monday';
+    };
+
+    const addDaysToDateStr = (dateStr: string, days: number): string => {
+      const dayStartUtc = fromZonedTime(
+        `${dateStr}T00:00:00`,
+        professionalTz
+      );
+      const dayStartZoned = toZonedTime(dayStartUtc, professionalTz);
+      const nextDayZoned = addDays(dayStartZoned, days);
+      const nextDayUtc = fromZonedTime(nextDayZoned, professionalTz);
+      return formatInTimeZone(nextDayUtc, professionalTz, 'yyyy-MM-dd');
+    };
+
+    const countWorkingDaysBetween = (
+      startDateStr: string,
+      endDateStr: string
+    ): number => {
+      const start = parseISO(startDateStr);
+      const end = parseISO(endDateStr);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return 0;
+      }
+      if (start.getTime() > end.getTime()) {
+        return 0;
+      }
+
+      let count = 0;
+      let cursorStr = startDateStr;
+      const maxIterations = 366 * 5;
+      let iterations = 0;
+
+      while (iterations < maxIterations && parseISO(cursorStr) <= end) {
+        const weekdayKey = getWeekdayKey(cursorStr);
+        const dayAvailability = professionalAvailability[weekdayKey];
+        if (dayAvailability?.available !== false) {
+          count += 1;
+        }
+        cursorStr = addDaysToDateStr(cursorStr, 1);
+        iterations += 1;
+      }
+
+      return count;
+    };
+
+    const throughputDays =
+      typeof scheduleWindow?.throughputDays === 'number'
+        ? scheduleWindow.throughputDays
+        : countWorkingDaysBetween(selectedDate, endDateStrInProfessionalTz);
+    const suggestionLimit = executionDays * THROUGHPUT_SUGGESTION_MULTIPLIER;
+
+    return {
+      throughputDays,
+      suggestionLimit,
+      executionDays,
+      exceedsSuggestion: throughputDays > suggestionLimit,
+    };
+  }, [
+    projectMode,
+    selectedDate,
+    professionalAvailability,
+    selectedPackage?.executionDuration,
+    project.executionDuration,
+    selectedPackage?.pricing.type,
+    scheduleWindowCompletionDate,
+    professionalTz,
+    scheduleWindow?.throughputDays,
+  ]);
 
   // Debug log for completion date display
-  console.log('[SCHEDULE WINDOW] Render state:', {
+  debugLog?.('[SCHEDULE WINDOW] Render state:', {
     scheduleWindow,
     loadingScheduleWindow,
     projectedCompletionDate: projectedCompletionDate?.toISOString(),
@@ -2027,7 +2320,7 @@ export default function ProjectBookingForm({
 
       // Validate parsed dates to avoid NaN in calculations
       if (Number.isNaN(startUtc.getTime()) || Number.isNaN(endUtc.getTime())) {
-        console.warn('[shortestThroughputDetails] Invalid date parsed:', {
+        debugWarn?.('[shortestThroughputDetails] Invalid date parsed:', {
           start: proposals.shortestThroughputProposal.start,
           end: proposals.shortestThroughputProposal.executionEnd,
           startValid: !Number.isNaN(startUtc.getTime()),
@@ -2048,7 +2341,7 @@ export default function ProjectBookingForm({
       // Return UTC dates - formatInTimeZone will convert them correctly for display
       return { startDate: startUtc, endDate: endUtc, totalDays };
     } catch (error) {
-      console.error('[shortestThroughputDetails] Error processing dates:', error);
+      debugError?.('[shortestThroughputDetails] Error processing dates:', error);
       return null;
     }
   })();
@@ -2511,7 +2804,7 @@ export default function ProjectBookingForm({
                                   }
                                   // For hours mode, check if there are available time slots
                                   if (projectMode === 'hours') {
-                                    const dateStr = format(date, 'yyyy-MM-dd');
+                                    const dateStr = toLocalDateKey(date);
                                     if (isDateBlocked(dateStr)) {
                                       toast.error(
                                         'No available time slots on this day'
@@ -2520,7 +2813,7 @@ export default function ProjectBookingForm({
                                     }
                                   }
                                   setHasUserSelectedDate(true);
-                                  setSelectedDate(format(date, 'yyyy-MM-dd'));
+                                  setSelectedDate(toLocalDateKey(date));
                                   setShowCalendar(false);
                                 }
                               }}
@@ -2538,7 +2831,7 @@ export default function ProjectBookingForm({
                               modifiers={{
                                 weekend: isWeekend, // Style weekends differently from blocked (gray, not red)
                                 blocked: (date) =>
-                                  isDateBlocked(format(date, 'yyyy-MM-dd')),
+                                  isDateBlocked(toLocalDateKey(date)),
                                 nonWorking: (date) =>
                                   !isProfessionalWorkingDay(date) &&
                                   !isWeekend(date),
@@ -2845,6 +3138,15 @@ export default function ProjectBookingForm({
                           !scheduleWindowCompletionDate && (
                             <p className='text-sm font-semibold pt-2 border-t border-blue-300 text-red-600'>
                               Selected date does not meet team availability.
+                            </p>
+                          )}
+                        {projectMode === 'days' &&
+                          throughputSuggestion?.exceedsSuggestion && (
+                            <p className='text-sm font-semibold pt-2 border-t border-blue-300 text-amber-700'>
+                              This date is available, but it may take longer than
+                              recommended ({throughputSuggestion.throughputDays}{' '}
+                              working days vs. {throughputSuggestion.suggestionLimit}{' '}
+                              suggested).
                             </p>
                           )}
                         {projectMode === 'days' &&
@@ -3247,6 +3549,15 @@ export default function ProjectBookingForm({
                       !scheduleWindowCompletionDate && (
                         <p className='text-sm font-semibold pt-2 border-t border-gray-300 text-red-600'>
                           Selected date does not meet team availability.
+                        </p>
+                      )}
+                    {projectMode === 'days' &&
+                      throughputSuggestion?.exceedsSuggestion && (
+                        <p className='text-sm font-semibold pt-2 border-t border-gray-300 text-amber-700'>
+                          This date is available, but it may take longer than
+                          recommended ({throughputSuggestion.throughputDays}{' '}
+                          working days vs. {throughputSuggestion.suggestionLimit}{' '}
+                          suggested).
                         </p>
                       )}
                     {projectMode === 'days' && shortestThroughputDetails && (
