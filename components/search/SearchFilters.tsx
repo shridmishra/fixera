@@ -104,6 +104,7 @@ const SearchFilters = ({
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     service: true,
     location: true,
+    category: false,
     priceModel: false,
     projectType: false,
     includedItems: false,
@@ -175,14 +176,13 @@ const SearchFilters = ({
   // Calculate active filters count
   const activeFiltersCount = [
     filters.services.length > 0,
-    filters.geographicArea.trim() !== '',
+    (filters.geographicArea || filters.location).trim() !== '',
     filters.priceModel.length > 0,
     filters.projectTypes.length > 0,
     filters.includedItems.length > 0,
     filters.areasOfWork.length > 0,
     filters.startDateFrom !== undefined || filters.startDateTo !== undefined,
     filters.priceMin !== '' || filters.priceMax !== '',
-    filters.location.trim() !== '',
     filters.category.trim() !== '',
     filters.availability,
   ].filter(Boolean).length;
@@ -289,6 +289,7 @@ const SearchFilters = ({
       {dynamicServices.length > 0 && (
         <div className="space-y-2 border-b pb-4">
           <button
+            type="button"
             onClick={() => toggleSection('service')}
             className="flex items-center justify-between w-full text-left"
           >
@@ -328,6 +329,7 @@ const SearchFilters = ({
       {searchType === 'projects' && dynamicAreasOfWork.length > 0 && (
         <div className="space-y-2 border-b pb-4">
           <button
+            type="button"
             onClick={() => toggleSection('areaOfWork')}
             className="flex items-center justify-between w-full text-left"
           >
@@ -364,6 +366,7 @@ const SearchFilters = ({
       {searchType === 'projects' && dynamicPriceModels.length > 0 && (
         <div className="space-y-2 border-b pb-4">
           <button
+            type="button"
             onClick={() => toggleSection('priceModel')}
             className="flex items-center justify-between w-full text-left"
           >
@@ -403,6 +406,7 @@ const SearchFilters = ({
       {searchType === 'projects' && dynamicProjectTypes.length > 0 && (
         <div className="space-y-2 border-b pb-4">
           <button
+            type="button"
             onClick={() => toggleSection('projectType')}
             className="flex items-center justify-between w-full text-left"
           >
@@ -442,6 +446,7 @@ const SearchFilters = ({
       {searchType === 'projects' && dynamicIncludedItems.length > 0 && (
         <div className="space-y-2 border-b pb-4">
           <button
+            type="button"
             onClick={() => toggleSection('includedItems')}
             className="flex items-center justify-between w-full text-left"
           >
@@ -476,6 +481,7 @@ const SearchFilters = ({
       {searchType === 'projects' && (
         <div className="space-y-2 border-b pb-4">
           <button
+            type="button"
             onClick={() => toggleSection('startDate')}
             className="flex items-center justify-between w-full text-left"
           >
@@ -542,6 +548,7 @@ const SearchFilters = ({
       {/* Price Range Filter */}
       <div className="space-y-2 border-b pb-4">
         <button
+          type="button"
           onClick={() => toggleSection('price')}
           className="flex items-center justify-between w-full text-left"
         >
@@ -584,8 +591,39 @@ const SearchFilters = ({
       </div>
 
       {/* Category Filter */}
-
-
+      {dynamicCategories.length > 0 && (
+        <div className="space-y-2 border-b pb-4">
+          <button
+            type="button"
+            onClick={() => toggleSection('category')}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <Label className="text-sm font-semibold text-gray-900 cursor-pointer">
+              Category {filters.category && '(1)'}
+            </Label>
+            {expandedSections.category ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {expandedSections.category && (
+            <div className="space-y-2 mt-2 max-h-48 overflow-y-auto">
+              {dynamicCategories.map(({ value, count }) => (
+                <div key={value} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`category-${value}`}
+                    checked={filters.category === value}
+                    onCheckedChange={() => onFilterChange('category', filters.category === value ? '' : value)}
+                  />
+                  <Label
+                    htmlFor={`category-${value}`}
+                    className="text-sm font-normal text-gray-700 cursor-pointer w-full"
+                  >
+                    {renderOptionContent(value, count)}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {/* Availability Filter - Only for professionals */}
       {searchType === 'professionals' && (
         <div className="space-y-2 border-b pb-4">
