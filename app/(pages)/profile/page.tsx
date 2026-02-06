@@ -541,6 +541,15 @@ export default function ProfilePage() {
       toast.error('Please provide valid start and end times')
       return
     }
+    const now = Date.now()
+    if (startDate.getTime() < now) {
+      toast.error('Cannot block time in the past')
+      return
+    }
+    if (endDate.getTime() < now) {
+      toast.error('End time cannot be in the past')
+      return
+    }
     if (startDate >= endDate) {
       toast.error('Start must be before end time')
       return
@@ -1532,6 +1541,7 @@ export default function ProfilePage() {
                                 onClick={() => removeBlockedRange(index)}
                                 variant="ghost"
                                 size="sm"
+                                disabled={profileSaving}
                                 className="text-rose-700 hover:text-rose-900 hover:bg-rose-100"
                               >
                                 <X className="h-4 w-4" />
@@ -1768,6 +1778,7 @@ export default function ProfilePage() {
                             onClick={() => removeCompanyBlockedRange(index)}
                             variant="ghost"
                             size="sm"
+                            disabled={profileSaving}
                             className="text-orange-600 hover:text-orange-700 hover:bg-orange-100"
                           >
                             <X className="h-4 w-4" />
@@ -1903,6 +1914,7 @@ export default function ProfilePage() {
                     id="edit-start"
                     type="datetime-local"
                     value={editingRange?.startValue || ''}
+                    min={toLocalInputValue(new Date().toISOString())}
                     onChange={(e) =>
                       setEditingRange((prev) =>
                         prev ? { ...prev, startValue: e.target.value } : prev
@@ -1916,6 +1928,7 @@ export default function ProfilePage() {
                     id="edit-end"
                     type="datetime-local"
                     value={editingRange?.endValue || ''}
+                    min={editingRange?.startValue || toLocalInputValue(new Date().toISOString())}
                     onChange={(e) =>
                       setEditingRange((prev) =>
                         prev ? { ...prev, endValue: e.target.value } : prev
