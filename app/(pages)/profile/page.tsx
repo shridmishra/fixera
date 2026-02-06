@@ -13,7 +13,7 @@ import EmployeeAvailability from "@/components/EmployeeAvailability"
 import AvailabilityCalendar from "@/components/calendar/AvailabilityCalendar"
 import WeeklyAvailabilityCalendar, { CalendarEvent } from "@/components/calendar/WeeklyAvailabilityCalendar"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -844,6 +844,34 @@ export default function ProfilePage() {
     }
   }
 
+  const calendarEvents = useMemo(() => {
+    const toEventDate = (value: string, isEnd = false) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split('-').map(Number)
+        return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0)
+      }
+      return new Date(value)
+    }
+    const personalEvents: CalendarEvent[] = blockedRanges.map((range, index) => ({
+      id: `personal-${index}`,
+      type: 'personal',
+      title: 'Personal Block',
+      start: toEventDate(range.startDate, false),
+      end: toEventDate(range.endDate, true),
+      meta: { note: range.reason, rangeIndex: index }
+    }))
+    const companyEvents: CalendarEvent[] = companyBlockedRanges.map((range, index) => ({
+      id: `company-${index}`,
+      type: 'company',
+      title: range.isHoliday ? 'Holiday' : 'Company Closure',
+      start: toEventDate(range.startDate, false),
+      end: toEventDate(range.endDate, true),
+      meta: { note: range.reason },
+      readOnly: true
+    }))
+    return [...companyEvents, ...bookingEvents, ...personalEvents]
+  }, [blockedRanges, companyBlockedRanges, bookingEvents])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -863,36 +891,11 @@ export default function ProfilePage() {
   const canValidate = vatNumber.trim() && vatNumber !== (user?.vatNumber || '')
 
   const serviceOptions = [
-    'Plumbing', 'Electrical', 'Carpentry', 'Painting', 'Cleaning', 
+    'Plumbing', 'Electrical', 'Carpentry', 'Painting', 'Cleaning',
     'IT Support', 'Home Repair', 'Gardening', 'Moving', 'Tutoring'
   ]
 
   const isProfessional = user?.role === 'professional'
-  const toEventDate = (value: string, isEnd = false) => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      const [year, month, day] = value.split('-').map(Number)
-      return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0)
-    }
-    return new Date(value)
-  }
-  const personalEvents: CalendarEvent[] = blockedRanges.map((range, index) => ({
-    id: `personal-${index}`,
-    type: 'personal',
-    title: 'Personal Block',
-    start: toEventDate(range.startDate, false),
-    end: toEventDate(range.endDate, true),
-    meta: { note: range.reason, rangeIndex: index }
-  }))
-  const companyEvents: CalendarEvent[] = companyBlockedRanges.map((range, index) => ({
-    id: `company-${index}`,
-    type: 'company',
-    title: range.isHoliday ? 'Holiday' : 'Company Closure',
-    start: toEventDate(range.startDate, false),
-    end: toEventDate(range.endDate, true),
-    meta: { note: range.reason },
-    readOnly: true
-  }))
-  const calendarEvents = [...companyEvents, ...bookingEvents, ...personalEvents]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -1935,14 +1938,14 @@ export default function ProfilePage() {
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <Button variant="destructive" onClick={deleteBlockedRange}>
+                <Button variant="destructive" disabled={profileSaving} onClick={deleteBlockedRange}>
                   Remove Block
                 </Button>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setEditingRange(null)}>
+                  <Button variant="outline" disabled={profileSaving} onClick={() => setEditingRange(null)}>
                     Cancel
                   </Button>
-                  <Button onClick={updateBlockedRange}>Save Changes</Button>
+                  <Button disabled={profileSaving} onClick={updateBlockedRange}>Save Changes</Button>
                 </div>
               </div>
             </div>

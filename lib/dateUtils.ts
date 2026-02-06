@@ -13,7 +13,8 @@ import { toZonedTime } from 'date-fns-tz'
  * @returns Local datetime string in "yyyy-MM-dd'T'HH:mm" format, or empty string if invalid
  */
 export function toLocalInputValue(value: string): string {
-  const date = new Date(value)
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value
+  const date = new Date(normalized)
   if (Number.isNaN(date.getTime())) return ''
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const zoned = toZonedTime(date, timeZone)
