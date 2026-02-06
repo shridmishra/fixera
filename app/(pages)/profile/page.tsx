@@ -1463,7 +1463,7 @@ export default function ProfilePage() {
                           type="datetime-local"
                         value={newBlockedRange.startDate}
                         onChange={(e) => setNewBlockedRange(prev => ({ ...prev, startDate: e.target.value }))}
-                        min={new Date().toISOString().slice(0, 16)}
+                        min={toLocalInputValue(new Date().toISOString())}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1473,7 +1473,7 @@ export default function ProfilePage() {
                         type="datetime-local"
                         value={newBlockedRange.endDate}
                         onChange={(e) => setNewBlockedRange(prev => ({ ...prev, endDate: e.target.value }))}
-                        min={newBlockedRange.startDate || new Date().toISOString().slice(0, 16)}
+                        min={newBlockedRange.startDate || toLocalInputValue(new Date().toISOString())}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1693,7 +1693,7 @@ export default function ProfilePage() {
                           type="date"
                           value={newCompanyBlockedRange.startDate}
                           onChange={(e) => setNewCompanyBlockedRange(prev => ({...prev, startDate: e.target.value}))}
-                          min={new Date().toISOString().split('T')[0]}
+                          min={toLocalInputValue(new Date().toISOString()).split('T')[0]}
                         />
                       </div>
                       <div className="md:col-span-3">
@@ -1705,7 +1705,7 @@ export default function ProfilePage() {
                           onChange={(e) => setNewCompanyBlockedRange(prev => ({...prev, endDate: e.target.value}))}
                           min={newCompanyBlockedRange.startDate
                             ? getNextDateValue(newCompanyBlockedRange.startDate)
-                            : new Date().toISOString().split('T')[0]}
+                            : toLocalInputValue(new Date().toISOString()).split('T')[0]}
                         />
                       </div>
                       <div className="md:col-span-4">

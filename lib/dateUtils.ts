@@ -28,7 +28,13 @@ export function toLocalInputValue(value: string): string {
  * @returns Date string in "yyyy-MM-dd" format for the next day (local time), or empty string if invalid
  */
 export function getNextDateValue(value: string): string {
-  const date = new Date(value)
+  let date: Date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-')
+    date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+  } else {
+    date = new Date(value)
+  }
   if (Number.isNaN(date.getTime())) return ''
   date.setDate(date.getDate() + 1)
   const year = date.getFullYear()
