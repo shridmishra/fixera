@@ -100,7 +100,7 @@ export default function IconPicker({ value, onChange, label = 'Select Icon' }: I
                                     key={iconName}
                                     variant={isSelected ? "default" : "outline"}
                                     className={cn(
-                                        "flex flex-col items-center justify-center p-2 h-20 w-full gap-2 hover:bg-muted/80",
+                                        "relative flex flex-col items-center justify-center p-2 h-20 w-full gap-2 hover:bg-muted/80",
                                         isSelected && "border-primary bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
                                     )}
                                     onClick={() => {
