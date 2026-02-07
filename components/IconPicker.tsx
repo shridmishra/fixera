@@ -49,6 +49,7 @@ export default function IconPicker({ value, onChange, label = 'Select Icon' }: I
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button
+                    type="button"
                     variant="outline"
                     className="w-full justify-between px-3 font-normal"
                 >
