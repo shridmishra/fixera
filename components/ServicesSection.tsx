@@ -9,9 +9,13 @@ import { ArrowRight } from 'lucide-react'
 import { serviceCategories, iconMap } from '@/data/content'
 
 // --- Helper Component for Icons ---
+const isIconName = (name: string): name is keyof typeof iconMap =>
+  Object.prototype.hasOwnProperty.call(iconMap, name);
+
 const Icon = ({ name, className }: { name: string; className?: string }) => {
+  if (!isIconName(name)) return null;
   const LucideIcon = iconMap[name];
-  return LucideIcon ? <LucideIcon className={className} /> : null;
+  return <LucideIcon className={className} />;
 };
 
 const ServiceCard = ({ service }: { service: any }) => {  //eslint-disable-line

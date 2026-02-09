@@ -25,10 +25,14 @@ interface ServiceCategory {
   services: Service[];
 }
 
+const isIconName = (name: string): name is keyof typeof iconMap =>
+  Object.prototype.hasOwnProperty.call(iconMap, name);
+
 // Helper Icon Component
 const Icon = ({ name, className }: { name: string; className?: string }) => {
+  if (!isIconName(name)) return null;
   const LucideIcon = iconMap[name];
-  return LucideIcon ? <LucideIcon className={className} /> : null;
+  return <LucideIcon className={className} />;
 };
 
 // Reusable Service Card Component

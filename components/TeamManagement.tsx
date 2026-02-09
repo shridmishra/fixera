@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +30,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalInputValue } from "@/lib/dateUtils"
+import { parseTimeToMinutes } from "@/lib/scheduleUtils"
 
 type Day =
   | 'monday'
@@ -48,6 +50,38 @@ interface DayAvailability {
 type WeeklyAvailability = {
   [day in Day]: DayAvailability;
 };
+
+const minutesToTime = (minutes: number) => {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+}
+
+const getScheduleWindow = (availability?: WeeklyAvailability) => {
+  if (!availability) {
+    return { dayStart: '09:00', dayEnd: '17:00' }
+  }
+
+  const days: Day[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+  let min: number | null = null
+  let max: number | null = null
+
+  days.forEach((day) => {
+    const dayData = availability[day]
+    if (!dayData?.available) return
+    const start = parseTimeToMinutes(dayData.startTime || '09:00')
+    const end = parseTimeToMinutes(dayData.endTime || '17:00')
+    if (start === null || end === null || end <= start) return
+    min = min === null ? start : Math.min(min, start)
+    max = max === null ? end : Math.max(max, end)
+  })
+
+  if (min === null || max === null) {
+    return { dayStart: '09:00', dayEnd: '17:00' }
+  }
+
+  return { dayStart: minutesToTime(min), dayEnd: minutesToTime(max) }
+}
 
 
 interface Employee {
@@ -110,6 +144,7 @@ const getDateValue = (dateValue: DateInput): string | null => {
 };
 
 export default function EmployeeManagement() {
+  const router = useRouter()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
@@ -152,6 +187,11 @@ export default function EmployeeManagement() {
     endValue: string;
     reason: string;
   } | null>(null)
+
+  const scheduleWindow = useMemo(
+    () => getScheduleWindow(availabilityDialog?.availability),
+    [availabilityDialog?.availability]
+  )
 
   // Pagination states
   const EMPLOYEES_PER_PAGE = 10
@@ -542,8 +582,7 @@ export default function EmployeeManagement() {
         meta: {
           bookingId: range.bookingId,
           location: range.location
-        },
-        readOnly: true
+        }
       })
     })
 
@@ -1135,7 +1174,7 @@ export default function EmployeeManagement() {
           <DialogHeader>
             <DialogTitle>Manage Availability - {availabilityDialog?.name}</DialogTitle>
             <DialogDescription>
-              Set blocked periods for this employee. Working hours are fixed to Monday-Friday, 09:00-17:00.
+              Set blocked periods for this employee. Working hours follow the company schedule and are read-only.
             </DialogDescription>
           </DialogHeader>
 
@@ -1220,17 +1259,25 @@ export default function EmployeeManagement() {
 
             <WeeklyAvailabilityCalendar
               title="Weekly Availability"
-              description="Hover for details. Click personal blocks to edit."
+              description="Hover for details. Click personal blocks to edit. Click bookings to view."
               events={calendarEvents}
+              dayStart={scheduleWindow.dayStart}
+              dayEnd={scheduleWindow.dayEnd}
               onEventClick={(event) => {
                 if (event.type === 'personal' && typeof event.meta?.rangeIndex === 'number') {
                   openEditRange(event.meta.rangeIndex)
+                }
+                if (
+                  (event.type === 'booking' || event.type === 'booking-buffer') &&
+                  event.meta?.bookingId
+                ) {
+                  router.push(`/bookings/${event.meta.bookingId}`)
                 }
               }}
             />
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              Working hours are fixed to Monday-Friday, 09:00-17:00.
+              Working hours follow the company schedule and are read-only.
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
