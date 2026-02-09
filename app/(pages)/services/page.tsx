@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowRight, Shield, Loader2, AlertCircle } from 'lucide-react';
-import { iconMap } from '@/data/content';
+import Icon, { IconName } from '@/components/Icon';
 import { toast } from 'sonner';
 
 interface Service {
@@ -21,18 +21,14 @@ interface ServiceCategory {
   name: string;
   slug: string;
   description?: string;
-  icon?: keyof typeof iconMap;
+  icon?: IconName;
   services: Service[];
 }
 
-// Helper Icon Component
-const Icon = ({ name, className }: { name: keyof typeof iconMap; className?: string }) => {
-  const LucideIcon = iconMap[name];
-  return LucideIcon ? <LucideIcon className={className} /> : null;
-};
+
 
 // Reusable Service Card Component
-const ServiceCard = ({ service, categoryName, categoryIcon }: { service: Service; categoryName: string; categoryIcon?: keyof typeof iconMap }) => {
+const ServiceCard = ({ service, categoryName, categoryIcon }: { service: Service; categoryName: string; categoryIcon?: IconName }) => {
   return (
     <Card className="group overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border-gray-200 flex flex-col">
       <div className="relative h-48 bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">

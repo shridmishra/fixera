@@ -6,13 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ArrowRight } from 'lucide-react'
-import { serviceCategories, iconMap } from '@/data/content'
+import { serviceCategories } from '@/data/content'
+import Icon, { IconName } from '@/components/Icon'
 
-// --- Helper Component for Icons ---
-const Icon = ({ name, className }: { name: keyof typeof iconMap; className?: string }) => {
-  const LucideIcon = iconMap[name];
-  return LucideIcon ? <LucideIcon className={className} /> : null;
-};
+
 
 const ServiceCard = ({ service }: { service: any }) => {  //eslint-disable-line
   return (
@@ -22,7 +19,7 @@ const ServiceCard = ({ service }: { service: any }) => {  //eslint-disable-line
           <div className="h-48 bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
             <div className="p-6 rounded-full bg-white shadow-lg group-hover:scale-110 transition-transform duration-300">
               <Icon
-                name={service.icon || 'Wrench'} // Fallback icon
+                name={(service.icon || 'Wrench') as IconName} // Fallback icon
                 className="w-8 h-8 text-blue-600 group-hover:text-purple-600 transition-colors duration-300"
               />
             </div>
