@@ -29,6 +29,13 @@ interface Professional {
   idProofUrl?: string;
   idProofFileName?: string;
   isIdVerified?: boolean;
+  idCountryOfIssue?: string;
+  idExpirationDate?: string;
+  pendingIdChanges?: {
+    field: string;
+    oldValue: string;
+    newValue: string;
+  }[];
   vatNumber?: string;
   isVatVerified?: boolean;
   createdAt: string;
@@ -74,6 +81,19 @@ export default function ProfessionalsAdminPage() {
     reason: '',
     error: null
   })
+
+  const [idChangeReviewModal, setIdChangeReviewModal] = useState<{
+    isOpen: boolean;
+    professional: Professional | null;
+    rejectionReason: string;
+    error: string | null;
+  }>({
+    isOpen: false,
+    professional: null,
+    rejectionReason: '',
+    error: null
+  })
+  const [idChangeLoading, setIdChangeLoading] = useState(false)
 
   useEffect(() => {
     if (!loading && (!isAuthenticated || user?.role !== 'admin')) {
@@ -233,6 +253,72 @@ export default function ProfessionalsAdminPage() {
       console.error(`Failed to ${action} professional:`, error)
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  const openIdChangeReview = (professional: Professional) => {
+    setIdChangeReviewModal({
+      isOpen: true,
+      professional,
+      rejectionReason: '',
+      error: null
+    })
+  }
+
+  const handleIdChangeAction = async (action: 'approve' | 'reject') => {
+    if (!idChangeReviewModal.professional) return
+
+    if (action === 'reject' && idChangeReviewModal.rejectionReason.trim().length < 10) {
+      setIdChangeReviewModal(prev => ({
+        ...prev,
+        error: 'Rejection reason must be at least 10 characters'
+      }))
+      return
+    }
+
+    setIdChangeLoading(true)
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/professionals/${idChangeReviewModal.professional._id}/id-changes`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            action,
+            reason: action === 'reject' ? idChangeReviewModal.rejectionReason.trim() : undefined
+          })
+        }
+      )
+
+      if (response.ok) {
+        fetchProfessionals()
+        setSelectedProfessional(null)
+        setIdChangeReviewModal({ isOpen: false, professional: null, rejectionReason: '', error: null })
+      } else {
+        const errorData = await response.json()
+        setIdChangeReviewModal(prev => ({
+          ...prev,
+          error: errorData.msg || `Failed to ${action} ID changes`
+        }))
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} ID changes:`, error)
+      setIdChangeReviewModal(prev => ({
+        ...prev,
+        error: `Failed to ${action} ID changes`
+      }))
+    } finally {
+      setIdChangeLoading(false)
+    }
+  }
+
+  const getFieldLabel = (field: string): string => {
+    switch (field) {
+      case 'idCountryOfIssue': return 'Country of Issue'
+      case 'idExpirationDate': return 'Expiration Date'
+      case 'idProofDocument': return 'ID Document'
+      default: return field
     }
   }
 
@@ -450,6 +536,33 @@ export default function ProfessionalsAdminPage() {
                     </div>
                   )}
 
+                  {/* Pending ID Changes Indicator */}
+                  {professional.pendingIdChanges && professional.pendingIdChanges.length > 0 && (
+                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="text-sm font-medium text-amber-800 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Pending ID Changes (Re-verification Required)
+                      </div>
+                      <div className="space-y-1">
+                        {professional.pendingIdChanges.map((change, idx) => (
+                          <div key={idx} className="text-xs text-amber-700">
+                            <span className="font-medium">{getFieldLabel(change.field)}:</span>{' '}
+                            <span className="line-through">{change.oldValue || '(empty)'}</span>
+                            {' → '}
+                            <span className="font-medium">{change.newValue || '(empty)'}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        onClick={() => openIdChangeReview(professional)}
+                        size="sm"
+                        className="mt-2 bg-amber-600 hover:bg-amber-700"
+                      >
+                        Review ID Changes
+                      </Button>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <Button
                       onClick={() => setSelectedProfessional(professional)}
@@ -629,6 +742,52 @@ export default function ProfessionalsAdminPage() {
                     </Badge>
                   )}
                 </div>
+
+                {/* Pending ID Changes in Detail Modal */}
+                {selectedProfessional.pendingIdChanges && selectedProfessional.pendingIdChanges.length > 0 && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <h4 className="font-medium mb-3 flex items-center gap-2 text-amber-800">
+                      <AlertTriangle className="h-4 w-4" />
+                      Pending ID Changes
+                    </h4>
+                    <div className="space-y-2 mb-4">
+                      {selectedProfessional.pendingIdChanges.map((change, idx) => (
+                        <div key={idx} className="flex items-center gap-4 p-2 bg-white rounded border">
+                          <span className="text-sm font-medium w-36">{getFieldLabel(change.field)}</span>
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-red-600 line-through">{change.oldValue || '(empty)'}</span>
+                            <span className="text-gray-400">→</span>
+                            <span className="text-green-700 font-medium">{change.newValue || '(empty)'}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => openIdChangeReview(selectedProfessional)}
+                        size="sm"
+                        className="bg-amber-600 hover:bg-amber-700"
+                      >
+                        Review Changes
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ID Metadata Display */}
+                {(selectedProfessional.idCountryOfIssue || selectedProfessional.idExpirationDate) && (
+                  <div>
+                    <h4 className="font-medium mb-3">ID Document Details</h4>
+                    <div className="space-y-1 text-sm">
+                      {selectedProfessional.idCountryOfIssue && (
+                        <div><span className="font-medium">Country of Issue:</span> {selectedProfessional.idCountryOfIssue}</div>
+                      )}
+                      {selectedProfessional.idExpirationDate && (
+                        <div><span className="font-medium">Expiration Date:</span> {new Date(selectedProfessional.idExpirationDate).toLocaleDateString()}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -811,6 +970,118 @@ export default function ProfessionalsAdminPage() {
                     Suspend Professional
                   </>
                 )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ID Change Review Modal */}
+      {idChangeReviewModal.isOpen && idChangeReviewModal.professional && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-amber-700">
+                Review ID Changes
+              </h3>
+              <Button
+                onClick={() => setIdChangeReviewModal({ isOpen: false, professional: null, rejectionReason: '', error: null })}
+                variant="ghost"
+                size="sm"
+                className="p-1"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-3">
+                <strong>{idChangeReviewModal.professional.name}</strong> has made changes to their ID information:
+              </p>
+
+              <div className="space-y-2 mb-4">
+                {idChangeReviewModal.professional.pendingIdChanges?.map((change, idx) => (
+                  <div key={idx} className="p-3 bg-gray-50 rounded-lg border">
+                    <div className="text-xs font-medium text-gray-500 mb-1">{getFieldLabel(change.field)}</div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-400">Previous</div>
+                        <div className="text-sm text-red-700 font-medium">{change.oldValue || '(not set)'}</div>
+                      </div>
+                      <span className="text-gray-300">→</span>
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-400">New</div>
+                        <div className="text-sm text-green-700 font-medium">{change.newValue || '(not set)'}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {idChangeReviewModal.professional.idProofUrl && (
+                <div className="mb-4">
+                  <a
+                    href={idChangeReviewModal.professional.idProofUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    <FileText className="h-3 w-3" />
+                    View ID Document
+                  </a>
+                </div>
+              )}
+
+              <div className="border-t pt-3">
+                <Label htmlFor="idChangeRejectionReason" className="text-sm font-medium">
+                  Rejection Reason (required if rejecting)
+                </Label>
+                <textarea
+                  id="idChangeRejectionReason"
+                  placeholder="Provide reason for rejection (min 10 characters)..."
+                  value={idChangeReviewModal.rejectionReason}
+                  onChange={(e) => setIdChangeReviewModal(prev => ({
+                    ...prev,
+                    rejectionReason: e.target.value,
+                    error: null
+                  }))}
+                  className="mt-1 flex min-h-[80px] w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+                  rows={3}
+                />
+              </div>
+
+              {idChangeReviewModal.error && (
+                <p className="text-red-600 text-xs mt-2">{idChangeReviewModal.error}</p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                onClick={() => handleIdChangeAction('approve')}
+                disabled={idChangeLoading}
+                size="sm"
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                {idChangeLoading ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                ) : (
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                )}
+                Re-approve
+              </Button>
+              <Button
+                onClick={() => handleIdChangeAction('reject')}
+                disabled={idChangeLoading}
+                variant="destructive"
+                size="sm"
+                className="flex-1"
+              >
+                {idChangeLoading ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                ) : (
+                  <XCircle className="h-3 w-3 mr-1" />
+                )}
+                Reject Changes
               </Button>
             </div>
           </div>

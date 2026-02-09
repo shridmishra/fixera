@@ -107,9 +107,12 @@ export default function CategoryPage() {
   // Convert slug to display name
   const getCategoryName = (slug: string) => {
     const nameMap: Record<string, string> = {
-      'exterior': 'Exterior',
+      'small-tasks': 'Small tasks',
       'interior': 'Interior',
-      'outdoor-work': 'Outdoor Work'
+      'exterior': 'Exterior',
+      'outdoor-work': 'Outdoor work',
+      'renovation': 'Renovation',
+      'inspections': 'Inspections'
     };
     return nameMap[slug] || slug.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
