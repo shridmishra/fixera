@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { User, Mail, Phone, Shield, Calendar, Building, Check, X, AlertCircle, Loader2, Upload, FileText, CalendarX } from "lucide-react"
+import { User, Mail, Phone, Shield, Calendar, Building, Check, X, AlertCircle, Loader2, Upload, FileText, CalendarX, Pencil, MapPin, AlertTriangle } from "lucide-react"
 import EmployeeManagement from "@/components/TeamManagement"
 import PasswordChange from "@/components/PasswordChange"
 import EmployeeAvailability from "@/components/EmployeeAvailability"
@@ -109,6 +109,22 @@ export default function ProfilePage() {
   const [newPhoneNumber, setNewPhoneNumber] = useState('')
   const [phoneUpdating, setPhoneUpdating] = useState(false)
 
+  // Customer address state
+  const [customerAddress, setCustomerAddress] = useState({
+    address: '',
+    city: '',
+    country: '',
+    postalCode: ''
+  })
+  const [customerBusinessName, setCustomerBusinessName] = useState('')
+  const [customerProfileSaving, setCustomerProfileSaving] = useState(false)
+
+  // ID metadata state (for professionals)
+  const [idCountryOfIssue, setIdCountryOfIssue] = useState('')
+  const [idExpirationDate, setIdExpirationDate] = useState('')
+  const [idInfoSaving, setIdInfoSaving] = useState(false)
+  const [showIdChangeWarning, setShowIdChangeWarning] = useState(false)
+
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       router.push('/login?redirect=/profile')
@@ -118,6 +134,32 @@ export default function ProfilePage() {
   useEffect(() => {
     if (user?.vatNumber) {
       setVatNumber(user.vatNumber)
+    }
+
+    // Populate phone
+    if (user?.phone) {
+      setNewPhoneNumber(user.phone)
+    }
+
+    // Populate customer address
+    if (user?.role === 'customer') {
+      if (user.location) {
+        setCustomerAddress({
+          address: user.location.address || '',
+          city: user.location.city || '',
+          country: user.location.country || '',
+          postalCode: user.location.postalCode || ''
+        })
+      }
+      if (user.businessName) {
+        setCustomerBusinessName(user.businessName)
+      }
+    }
+
+    // Populate ID metadata for professionals
+    if (user?.role === 'professional') {
+      if (user.idCountryOfIssue) setIdCountryOfIssue(user.idCountryOfIssue)
+      if (user.idExpirationDate) setIdExpirationDate(user.idExpirationDate.split('T')[0])
     }
 
     // Populate professional data
@@ -898,6 +940,87 @@ export default function ProfilePage() {
     }
   }
 
+
+  // Customer profile update handler
+  const handleCustomerProfileUpdate = async () => {
+    setCustomerProfileSaving(true)
+    try {
+      const token = getAuthToken()
+      const body: Record<string, string> = {
+        address: customerAddress.address,
+        city: customerAddress.city,
+        country: customerAddress.country,
+        postalCode: customerAddress.postalCode,
+      }
+      if (user?.customerType === 'business') {
+        body.businessName = customerBusinessName
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/customer-profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success('Profile updated successfully')
+        await checkAuth()
+      } else {
+        toast.error(result.msg || 'Failed to update profile')
+      }
+    } catch {
+      toast.error('Failed to update profile')
+    } finally {
+      setCustomerProfileSaving(false)
+    }
+  }
+
+  // ID info update handler (with warning dialog)
+  const handleIdInfoUpdate = async () => {
+    setIdInfoSaving(true)
+    try {
+      const token = getAuthToken()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/id-info`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          idCountryOfIssue,
+          idExpirationDate: idExpirationDate || undefined
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success(result.msg || 'ID information updated. Re-verification required.')
+        setShowIdChangeWarning(false)
+        await checkAuth()
+      } else {
+        toast.error(result.msg || 'Failed to update ID information')
+      }
+    } catch {
+      toast.error('Failed to update ID information')
+    } finally {
+      setIdInfoSaving(false)
+    }
+  }
+
+  const hasIdInfoChanges = () => {
+    const currentCountry = user?.idCountryOfIssue || ''
+    const currentExpiry = user?.idExpirationDate ? user.idExpirationDate.split('T')[0] : ''
+    return idCountryOfIssue !== currentCountry || idExpirationDate !== currentExpiry
+  }
+
   const calendarEvents = useMemo(() => {
     const toEventDate = (value: string, isEnd = false) => {
       if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -1051,52 +1174,30 @@ export default function ProfilePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-gray-500" />
-                      {!isEditingPhone ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{user?.phone}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => {
-                              setNewPhoneNumber(user?.phone || '')
-                              setIsEditingPhone(true)
-                            }}
-                            aria-label="Edit phone number"
-                            title="Edit phone number"
-                          >
-                            <FileText className="h-3 w-3" /> {/* Reusing FileText as edit icon substitute or use correct Icon */}
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
+                      {isEditingPhone ? (
+                        <div className="flex items-center gap-2 flex-1">
                           <Input
                             value={newPhoneNumber}
                             onChange={(e) => setNewPhoneNumber(e.target.value)}
-                            className="h-7 w-40 text-sm"
-                            placeholder="New phone number"
+                            placeholder="+32123456789"
+                            className="h-8 text-sm flex-1"
                           />
-                          <Button
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={handleUpdatePhone}
-                            disabled={phoneUpdating}
-                            aria-label={phoneUpdating ? "Saving phone number" : "Save phone number"}
-                            title="Save phone number"
-                          >
-                            {phoneUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                          <Button size="sm" onClick={handleUpdatePhone} disabled={phoneUpdating} className="h-8">
+                            {phoneUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={() => setIsEditingPhone(false)}
-                            disabled={phoneUpdating}
-                            aria-label="Cancel editing phone number"
-                            title="Cancel editing phone number"
-                          >
-                            <X className="h-3 w-3" />
+                          <Button size="sm" variant="ghost" onClick={() => { setIsEditingPhone(false); setNewPhoneNumber(user?.phone || '') }} className="h-8">
+                            Cancel
                           </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-sm">{user?.phone}</span>
+                          <Button size="sm" variant="ghost" onClick={() => setIsEditingPhone(true)} className="h-6 w-6 p-0">
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          {!user?.isPhoneVerified && (
+                            <span className="text-xs text-orange-600">(Not verified)</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1107,7 +1208,7 @@ export default function ProfilePage() {
                   </CardContent>
                 </Card>
 
-                {/* Verification Status */}
+                {/* Verification Status Card */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -1278,7 +1379,7 @@ export default function ProfilePage() {
                   </Card>
                 )}
 
-                {/* Account Stats */}
+                {/* Account Stats Card */}
                 <Card className="md:col-span-2">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -1306,7 +1407,7 @@ export default function ProfilePage() {
             </TabsContent>
 
             {/* Business Info Tab */}
-            <TabsContent value="business" className="space-y-6">
+            < TabsContent value="business" className="space-y-6" >
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1455,10 +1556,10 @@ export default function ProfilePage() {
                   </Button>
                 </CardContent>
               </Card>
-            </TabsContent>
+            </TabsContent >
 
             {/* Documents Tab */}
-            <TabsContent value="documents" className="space-y-6">
+            < TabsContent value="documents" className="space-y-6" >
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1531,12 +1632,70 @@ export default function ProfilePage() {
                       </>
                     )}
                   </Button>
+
+                  {/* ID Metadata Fields */}
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="text-sm font-medium mb-3">ID Document Details</h4>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="idCountryOfIssue">Country of Issue</Label>
+                        <Input
+                          id="idCountryOfIssue"
+                          value={idCountryOfIssue}
+                          onChange={(e) => setIdCountryOfIssue(e.target.value)}
+                          placeholder="e.g., Belgium, Germany"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="idExpirationDate">Expiration Date</Label>
+                        <Input
+                          id="idExpirationDate"
+                          type="date"
+                          value={idExpirationDate}
+                          onChange={(e) => setIdExpirationDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {user?.professionalStatus === 'approved' && hasIdInfoChanges() && (
+                      <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                          <p className="text-xs text-amber-700">
+                            Changing ID information will trigger a re-verification. Your professional status will be set to pending until an admin re-approves your profile.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={() => {
+                        if (user?.professionalStatus === 'approved' && hasIdInfoChanges()) {
+                          setShowIdChangeWarning(true)
+                        } else {
+                          handleIdInfoUpdate()
+                        }
+                      }}
+                      disabled={!hasIdInfoChanges() || idInfoSaving}
+                      variant="outline"
+                      className="w-full mt-4"
+                    >
+                      {idInfoSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save ID Details'
+                      )}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+            </TabsContent >
 
             {/* Personal Availability Tab */}
-            <TabsContent value="personal-availability" className="space-y-6">
+            < TabsContent value="personal-availability" className="space-y-6" >
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1676,10 +1835,10 @@ export default function ProfilePage() {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+            </TabsContent >
 
             {/* Company Availability Tab */}
-            <TabsContent value="company-availability" className="space-y-6">
+            < TabsContent value="company-availability" className="space-y-6" >
               <div className="mb-6">
                 <h3 className="text-lg font-semibold">Company Availability & Holidays</h3>
                 <p className="text-sm text-muted-foreground">Set company-wide schedule that team members can inherit</p>
@@ -1887,18 +2046,18 @@ export default function ProfilePage() {
 
                 </CardContent>
               </Card>
-            </TabsContent>
+            </TabsContent >
 
             {/* Employees Tab */}
-            <TabsContent value="employees" className="space-y-6">
+            < TabsContent value="employees" className="space-y-6" >
               <EmployeeManagement />
-            </TabsContent>
+            </TabsContent >
 
             {/* Security Tab */}
-            <TabsContent value="security" className="space-y-6">
+            < TabsContent value="security" className="space-y-6" >
               <PasswordChange />
-            </TabsContent>
-          </Tabs>
+            </TabsContent >
+          </Tabs >
         ) : (
           // Non-professional users (customers, employees, etc.)
           <Tabs defaultValue="profile" className="w-full">
@@ -1928,52 +2087,30 @@ export default function ProfilePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-gray-500" />
-                      {!isEditingPhone ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{user?.phone?.startsWith('+1000000') ? 'Not provided' : user?.phone}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => {
-                              setNewPhoneNumber(user?.phone && !user.phone.startsWith('+1000000') ? user.phone : '')
-                              setIsEditingPhone(true)
-                            }}
-                            aria-label="Edit phone number"
-                            title="Edit phone number"
-                          >
-                            <FileText className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
+                      {isEditingPhone ? (
+                        <div className="flex items-center gap-2 flex-1">
                           <Input
                             value={newPhoneNumber}
                             onChange={(e) => setNewPhoneNumber(e.target.value)}
-                            className="h-7 w-40 text-sm"
-                            placeholder="New phone number"
+                            placeholder="+32123456789"
+                            className="h-8 text-sm flex-1"
                           />
-                          <Button
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={handleUpdatePhone}
-                            disabled={phoneUpdating}
-                            aria-label={phoneUpdating ? "Saving phone number" : "Save phone number"}
-                            title="Save phone number"
-                          >
-                            {phoneUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                          <Button size="sm" onClick={handleUpdatePhone} disabled={phoneUpdating} className="h-8">
+                            {phoneUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={() => setIsEditingPhone(false)}
-                            disabled={phoneUpdating}
-                            aria-label="Cancel editing phone number"
-                            title="Cancel editing phone number"
-                          >
-                            <X className="h-3 w-3" />
+                          <Button size="sm" variant="ghost" onClick={() => { setIsEditingPhone(false); setNewPhoneNumber(user?.phone || '') }} className="h-8">
+                            Cancel
                           </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-sm">{user?.phone?.startsWith('+1000000') ? 'Not provided' : user?.phone}</span>
+                          <Button size="sm" variant="ghost" onClick={() => setIsEditingPhone(true)} className="h-6 w-6 p-0">
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          {!user?.isPhoneVerified && (
+                            <span className="text-xs text-orange-600">(Not verified)</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1985,7 +2122,7 @@ export default function ProfilePage() {
                 </Card>
 
                 {/* Verification Status */}
-                <Card>
+                < Card >
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Shield className="h-5 w-5" />
@@ -2007,21 +2144,204 @@ export default function ProfilePage() {
                       </span>
                     </div>
                   </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
+                </Card >
+              </div >
+
+              {/* Customer Address Section */}
+              {
+                user?.role === 'customer' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="h-5 w-5" />
+                        Address Information
+                      </CardTitle>
+                      <CardDescription>
+                        Your address details
+                        {user.customerType === 'business' && ' and business information'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="customer-address">Address</Label>
+                          <Input
+                            id="customer-address"
+                            value={customerAddress.address}
+                            onChange={(e) => setCustomerAddress(prev => ({ ...prev, address: e.target.value }))}
+                            placeholder="Street address"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="customer-city">City</Label>
+                          <Input
+                            id="customer-city"
+                            value={customerAddress.city}
+                            onChange={(e) => setCustomerAddress(prev => ({ ...prev, city: e.target.value }))}
+                            placeholder="City"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="customer-country">Country</Label>
+                          <Input
+                            id="customer-country"
+                            value={customerAddress.country}
+                            onChange={(e) => setCustomerAddress(prev => ({ ...prev, country: e.target.value }))}
+                            placeholder="Country"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="customer-postalCode">Postal Code</Label>
+                          <Input
+                            id="customer-postalCode"
+                            value={customerAddress.postalCode}
+                            onChange={(e) => setCustomerAddress(prev => ({ ...prev, postalCode: e.target.value }))}
+                            placeholder="Postal Code"
+                          />
+                        </div>
+                      </div>
+
+                      {user.customerType === 'business' && (
+                        <>
+                          <div className="border-t pt-4 mt-4">
+                            <h4 className="text-sm font-medium mb-3">Business Information</h4>
+                            <div className="space-y-2">
+                              <Label htmlFor="customer-businessName">Business Name</Label>
+                              <Input
+                                id="customer-businessName"
+                                value={customerBusinessName}
+                                onChange={(e) => setCustomerBusinessName(e.target.value)}
+                                placeholder="Your business name"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      <Button
+                        onClick={handleCustomerProfileUpdate}
+                        disabled={customerProfileSaving}
+                        className="w-full"
+                      >
+                        {customerProfileSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Saving...
+                          </>
+                        ) : (
+                          'Save Profile'
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )
+              }
+
+              {/* VAT for business customers */}
+              {
+                user?.role === 'customer' && user.customerType === 'business' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Building className="h-5 w-5" />
+                        VAT Information
+                      </CardTitle>
+                      <CardDescription>
+                        Add your VAT number for EU tax compliance and invoicing.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="customer-vatNumber">VAT Number</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="customer-vatNumber"
+                            placeholder="e.g., DE123456789"
+                            value={vatNumber}
+                            onChange={(e) => handleVatNumberChange(e.target.value.toUpperCase())}
+                            className="flex-1"
+                          />
+                          <Button
+                            onClick={validateVatNumber}
+                            disabled={!canValidate || vatValidating}
+                            variant="outline"
+                            className="shrink-0"
+                          >
+                            {vatValidating ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Validating
+                              </>
+                            ) : (
+                              'Validate'
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {vatValidation.valid !== undefined && (
+                        <div className={`p-3 rounded-lg border ${vatValidation.valid
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-red-50 border-red-200'
+                          }`}>
+                          <div className="flex items-start gap-2">
+                            {vatValidation.valid ? (
+                              <Check className="h-4 w-4 text-green-600 mt-0.5" />
+                            ) : (
+                              <X className="h-4 w-4 text-red-600 mt-0.5" />
+                            )}
+                            <div className="flex-1 text-sm">
+                              {vatValidation.valid ? (
+                                <p className="font-medium text-green-800">VAT number is valid</p>
+                              ) : (
+                                <p className="text-red-700">{vatValidation.error}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={saveVatNumber}
+                          disabled={!hasVatChanges || vatSaving}
+                          className="flex-1"
+                        >
+                          {vatSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Saving...
+                            </>
+                          ) : (
+                            vatNumber ? 'Save VAT Number' : 'Remove VAT Number'
+                          )}
+                        </Button>
+                        {user?.vatNumber && (
+                          <Button onClick={removeVatNumber} disabled={vatSaving} variant="outline">
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              }
+            </TabsContent >
 
             <TabsContent value="security" className="space-y-6">
               <PasswordChange />
             </TabsContent>
 
-            {user?.role === 'employee' && (
-              <TabsContent value="availability" className="space-y-6">
-                <EmployeeAvailability />
-              </TabsContent>
-            )}
-          </Tabs>
-        )}
+            {
+              user?.role === 'employee' && (
+                <TabsContent value="availability" className="space-y-6">
+                  <EmployeeAvailability />
+                </TabsContent>
+              )
+            }
+          </Tabs >
+        )
+        }
 
         {/* Back to Dashboard */}
         <div className="mt-8">
@@ -2102,78 +2422,134 @@ export default function ProfilePage() {
         </Dialog>
 
         {/* PHASE 2: Auto-populate Dialog */}
-        {showAutoPopulateDialog && pendingVatData && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-5 w-5 text-blue-600" />
-                  Auto-populate Business Information?
-                </CardTitle>
-                <CardDescription>
-                  We found company information from your VAT registration. Would you like to auto-fill your business details?
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Preview of data to be populated */}
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-800 mb-2">Company Information Found:</h4>
-                  {pendingVatData.companyName && (
-                    <p className="text-sm text-blue-700"><strong>Company Name:</strong> {pendingVatData.companyName}</p>
-                  )}
-                  {pendingVatData.parsedAddress && (
-                    <>
-                      {pendingVatData.parsedAddress.streetAddress && (
-                        <p className="text-sm text-blue-700"><strong>Address:</strong> {pendingVatData.parsedAddress.streetAddress}</p>
-                      )}
-                      {pendingVatData.parsedAddress.city && (
-                        <p className="text-sm text-blue-700"><strong>City:</strong> {pendingVatData.parsedAddress.city}</p>
-                      )}
-                      {pendingVatData.parsedAddress.postalCode && (
-                        <p className="text-sm text-blue-700"><strong>Postal Code:</strong> {pendingVatData.parsedAddress.postalCode}</p>
-                      )}
-                      {pendingVatData.parsedAddress.country && (
-                        <p className="text-sm text-blue-700"><strong>Country:</strong> {getVATCountryName(pendingVatData.parsedAddress.country)}</p>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-xs text-amber-700">
-                    Only empty fields will be filled. Your existing data will not be overwritten.
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleAutoPopulate(true)}
-                    disabled={vatSaving}
-                    className="flex-1"
-                  >
-                    {vatSaving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Auto-filling...
-                      </>
-                    ) : (
-                      'Yes, Auto-fill'
+        {
+          showAutoPopulateDialog && pendingVatData && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <Card className="w-full max-w-md">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building className="h-5 w-5 text-blue-600" />
+                    Auto-populate Business Information?
+                  </CardTitle>
+                  <CardDescription>
+                    We found company information from your VAT registration. Would you like to auto-fill your business details?
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Preview of data to be populated */}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-medium text-blue-800 mb-2">Company Information Found:</h4>
+                    {pendingVatData.companyName && (
+                      <p className="text-sm text-blue-700"><strong>Company Name:</strong> {pendingVatData.companyName}</p>
                     )}
-                  </Button>
-                  <Button
-                    onClick={() => handleAutoPopulate(false)}
-                    variant="outline"
-                    disabled={vatSaving}
-                    className="flex-1"
-                  >
-                    No, Skip
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
-    </div>
+                    {pendingVatData.parsedAddress && (
+                      <>
+                        {pendingVatData.parsedAddress.streetAddress && (
+                          <p className="text-sm text-blue-700"><strong>Address:</strong> {pendingVatData.parsedAddress.streetAddress}</p>
+                        )}
+                        {pendingVatData.parsedAddress.city && (
+                          <p className="text-sm text-blue-700"><strong>City:</strong> {pendingVatData.parsedAddress.city}</p>
+                        )}
+                        {pendingVatData.parsedAddress.postalCode && (
+                          <p className="text-sm text-blue-700"><strong>Postal Code:</strong> {pendingVatData.parsedAddress.postalCode}</p>
+                        )}
+                        {pendingVatData.parsedAddress.country && (
+                          <p className="text-sm text-blue-700"><strong>Country:</strong> {getVATCountryName(pendingVatData.parsedAddress.country)}</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-700">
+                      Only empty fields will be filled. Your existing data will not be overwritten.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleAutoPopulate(true)}
+                      disabled={vatSaving}
+                      className="flex-1"
+                    >
+                      {vatSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Auto-filling...
+                        </>
+                      ) : (
+                        'Yes, Auto-fill'
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => handleAutoPopulate(false)}
+                      variant="outline"
+                      disabled={vatSaving}
+                      className="flex-1"
+                    >
+                      No, Skip
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )
+        }
+
+        {/* ID Change Warning Dialog */}
+        <Dialog open={showIdChangeWarning} onOpenChange={setShowIdChangeWarning}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-700">
+                <AlertTriangle className="h-5 w-5" />
+                Re-verification Required
+              </DialogTitle>
+              <DialogDescription>
+                Changing your ID information will require admin re-verification. Your professional status will be set to <strong>pending</strong> and you will not be able to receive new bookings until an admin re-approves your profile.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm">
+                <p className="font-medium text-amber-800 mb-1">Changes to be submitted:</p>
+                {idCountryOfIssue !== (user?.idCountryOfIssue || '') && (
+                  <p className="text-amber-700">
+                    Country of Issue: {user?.idCountryOfIssue || '(empty)'} → {idCountryOfIssue || '(empty)'}
+                  </p>
+                )}
+                {idExpirationDate !== (user?.idExpirationDate ? user.idExpirationDate.split('T')[0] : '') && (
+                  <p className="text-amber-700">
+                    Expiration Date: {user?.idExpirationDate ? new Date(user.idExpirationDate).toLocaleDateString() : '(empty)'} → {idExpirationDate ? new Date(idExpirationDate).toLocaleDateString() : '(empty)'}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleIdInfoUpdate}
+                  disabled={idInfoSaving}
+                  className="flex-1 bg-amber-600 hover:bg-amber-700"
+                >
+                  {idInfoSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Confirm Changes'
+                  )}
+                </Button>
+                <Button
+                  onClick={() => setShowIdChangeWarning(false)}
+                  variant="outline"
+                  disabled={idInfoSaving}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div >
+    </div >
   )
 }

@@ -19,6 +19,13 @@ interface User {
   idProofFileName?: string
   idProofUploadedAt?: string
   isIdVerified?: boolean
+  idCountryOfIssue?: string
+  idExpirationDate?: string
+  pendingIdChanges?: {
+    field: string
+    oldValue: string
+    newValue: string
+  }[]
   professionalStatus?: 'pending' | 'approved' | 'rejected' | 'suspended'
   approvedBy?: string
   approvedAt?: string
@@ -84,6 +91,7 @@ interface User {
     postalCode?: string
   }
   customerType?: 'individual' | 'business'
+  businessName?: string
   profileCompletedAt?: string
   createdAt: string
   updatedAt: string
