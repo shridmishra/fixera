@@ -27,6 +27,7 @@ interface ServiceCategory {
 
 
 
+
 // Reusable Service Card Component
 const ServiceCard = ({ service, categoryName, categoryIcon }: { service: Service; categoryName: string; categoryIcon?: IconName }) => {
   return (
