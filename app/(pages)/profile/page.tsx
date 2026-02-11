@@ -29,7 +29,7 @@ import {
   getVATCountryName,
   formatVATNumber
 } from "@/lib/vatValidation"
-import { toLocalInputValue, getNextDateValue } from "@/lib/dateUtils"
+import { toLocalInputValue } from "@/lib/dateUtils"
 
 
 export default function ProfilePage() {
@@ -803,8 +803,8 @@ export default function ProfilePage() {
       return
     }
 
-    if (startDate >= endDate) {
-      toast.error('End date must be after start date')
+    if (startDate > endDate) {
+      toast.error('End date cannot be before start date')
       return
     }
 
@@ -880,6 +880,9 @@ export default function ProfilePage() {
     }
 
 
+    // Ensure phone has '+' prefix for international format
+    const phoneToSend = newPhoneNumber.trim().startsWith('+') ? newPhoneNumber.trim() : '+' + newPhoneNumber.trim()
+
     setPhoneUpdating(true)
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/phone`, {
@@ -888,7 +891,7 @@ export default function ProfilePage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ phone: newPhoneNumber })
+        body: JSON.stringify({ phone: phoneToSend })
       })
 
       const result = await response.json()
@@ -1937,7 +1940,7 @@ export default function ProfilePage() {
                     Company Holidays & Closures
                   </CardTitle>
                   <CardDescription>
-                    Set company-wide closures using date ranges (minimum 2 days).
+                    Set company-wide closures for one or more days.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1961,7 +1964,7 @@ export default function ProfilePage() {
                           value={newCompanyBlockedRange.endDate}
                           onChange={(e) => setNewCompanyBlockedRange(prev => ({ ...prev, endDate: e.target.value }))}
                           min={newCompanyBlockedRange.startDate
-                            ? getNextDateValue(newCompanyBlockedRange.startDate)
+                            ? newCompanyBlockedRange.startDate
                             : toLocalInputValue(new Date().toISOString()).split('T')[0]}
                         />
                       </div>
@@ -1980,7 +1983,7 @@ export default function ProfilePage() {
                           disabled={
                             !newCompanyBlockedRange.startDate ||
                             !newCompanyBlockedRange.endDate ||
-                            newCompanyBlockedRange.endDate <= newCompanyBlockedRange.startDate
+                            newCompanyBlockedRange.endDate < newCompanyBlockedRange.startDate
                           }
                           className="w-full"
                         >
@@ -2011,7 +2014,9 @@ export default function ProfilePage() {
                             <CalendarX className="h-4 w-4 text-orange-600" />
                             <div className="flex flex-col">
                               <span className="text-sm font-medium text-orange-800">
-                                {new Date(range.startDate).toLocaleDateString()} - {new Date(range.endDate).toLocaleDateString()}
+                                {new Date(range.startDate).toLocaleDateString() === new Date(range.endDate).toLocaleDateString()
+                                  ? new Date(range.startDate).toLocaleDateString()
+                                  : `${new Date(range.startDate).toLocaleDateString()} - ${new Date(range.endDate).toLocaleDateString()}`}
                               </span>
                               {range.reason && (
                                 <span className="text-xs text-orange-600">{range.reason}</span>

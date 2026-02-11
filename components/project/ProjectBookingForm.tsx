@@ -2908,12 +2908,6 @@ export default function ProjectBookingForm({
                           <p className='text-sm text-gray-600 mt-1 mb-2'>
                             Choose your preferred start time.
                           </p>
-                          <div className='text-xs text-gray-500 space-y-1'>
-                            <p>
-                              Times shown in professional&apos;s timezone (
-                              {professionalTimezone})
-                            </p>
-                          </div>
                         </div>
 
                         {generateTimeSlots().length === 0 ? (
