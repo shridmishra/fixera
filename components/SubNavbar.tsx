@@ -20,6 +20,10 @@ interface Category {
   services: Service[];
 }
 
+// Shared constant for dropdown width — used in both the portal style and
+// the viewport-clamping logic inside handleMouseEnter.
+const DROPDOWN_WIDTH = 288; // matches w-72 (18rem × 16px)
+
 const getServiceIcon = (slug: string) => {
   const s = slug.toLowerCase();
   if (s.includes("plumb")) return Droplet;
@@ -50,11 +54,19 @@ const SubNavbar = () => {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const categoryRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetchCategories();
+  }, []);
+
+  // Clear any pending hover timeout on unmount to avoid state updates after cleanup
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
   }, []);
 
   const fetchCategories = async () => {
@@ -81,14 +93,14 @@ const SubNavbar = () => {
     const el = categoryRefs.current.get(categoryName);
     if (el) {
       const rect = el.getBoundingClientRect();
-      const dropdownWidth = 288; // w-72 = 18rem = 288px
-      const left = Math.min(rect.left, window.innerWidth - dropdownWidth - 8);
+      const left = Math.min(rect.left, window.innerWidth - DROPDOWN_WIDTH - 8);
       setDropdownPos({ top: rect.bottom, left: Math.max(8, left) });
     }
     setHoveredCategory(categoryName);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
       setHoveredCategory(null);
       setDropdownPos(null);
@@ -103,6 +115,7 @@ const SubNavbar = () => {
   }, []);
 
   const handleDropdownLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
       setHoveredCategory(null);
       setDropdownPos(null);
@@ -134,9 +147,14 @@ const SubNavbar = () => {
                 ref={(el) => {
                   if (el) categoryRefs.current.set(category.name, el);
                 }}
+                role="menuitem"
+                aria-haspopup="true"
+                aria-expanded={hoveredCategory === category.name}
                 className="h-full flex items-center shrink-0"
                 onMouseEnter={() => handleMouseEnter(category.name)}
                 onMouseLeave={handleMouseLeave}
+                onFocus={() => handleMouseEnter(category.name)}
+                onBlur={handleMouseLeave}
               >
                 <Link
                   href={`/categories/${category.slug}`}
@@ -157,21 +175,25 @@ const SubNavbar = () => {
       {/* Dropdown rendered via portal to escape overflow clipping */}
       {hoveredCategoryData && dropdownPos && typeof document !== 'undefined' && createPortal(
         <div
-          ref={dropdownRef}
-          className="w-72 bg-white rounded-b-lg shadow-2xl border border-t-0 border-gray-200 z-[9999] max-h-96 overflow-y-auto"
+          role="menu"
+          className="bg-white rounded-b-lg shadow-2xl border border-t-0 border-gray-200 z-[9999] max-h-96 overflow-y-auto"
           style={{
             position: 'fixed',
             top: dropdownPos.top,
             left: dropdownPos.left,
+            width: DROPDOWN_WIDTH,
           }}
           onMouseEnter={handleDropdownEnter}
           onMouseLeave={handleDropdownLeave}
+          onFocus={handleDropdownEnter}
+          onBlur={handleDropdownLeave}
         >
           <div className="py-4">
             <ul className="px-4 space-y-1">
               {hoveredCategoryData.services.map((service) => (
-                <li key={service.slug}>
+                <li key={service.slug} role="none">
                   <Link
+                    role="menuitem"
                     href={`/services/${service.slug}`}
                     className="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-gray-50 p-2.5 rounded-md transition-colors"
                   >
