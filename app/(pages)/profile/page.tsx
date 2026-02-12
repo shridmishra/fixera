@@ -310,7 +310,8 @@ export default function ProfilePage() {
           throw new Error(`Failed to fetch service categories: ${response.status}`)
         }
         const data = await response.json()
-        setServiceCatalog(Array.isArray(data) ? data : [])
+        const items = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+        setServiceCatalog(items)
       } catch (error) {
         console.error('Failed to load service categories:', error)
         setServiceCatalogError('Failed to load service categories')
