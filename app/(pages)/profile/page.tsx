@@ -34,6 +34,11 @@ import {
 import { toLocalInputValue } from "@/lib/dateUtils"
 
 
+function normalizeCountryCode(raw: string): string {
+  if (raw.length === 2) return raw.toUpperCase()
+  return EU_COUNTRIES.find((c) => c.name.toLowerCase() === raw.toLowerCase())?.code || raw
+}
+
 export default function ProfilePage() {
   const { user, isAuthenticated, loading, checkAuth } = useAuth()
   const router = useRouter()
@@ -156,11 +161,7 @@ export default function ProfilePage() {
     // Populate ID metadata for professionals
     if (user?.role === 'professional') {
       if (user.idCountryOfIssue) {
-        const rawCountry = user.idCountryOfIssue
-        const normalizedCountryCode = rawCountry.length === 2
-          ? rawCountry.toUpperCase()
-          : (EU_COUNTRIES.find((country) => country.name.toLowerCase() === rawCountry.toLowerCase())?.code || '')
-        setIdCountryOfIssue(normalizedCountryCode || user.idCountryOfIssue)
+        setIdCountryOfIssue(normalizeCountryCode(user.idCountryOfIssue))
       }
       if (user.idExpirationDate) setIdExpirationDate(user.idExpirationDate.split('T')[0])
     }
@@ -297,6 +298,8 @@ export default function ProfilePage() {
       return
     }
 
+    const controller = new AbortController()
+
     const fetchServiceCatalog = async () => {
       try {
         setServiceCatalogLoading(true)
@@ -304,7 +307,7 @@ export default function ProfilePage() {
         const country = user?.businessInfo?.country || 'BE'
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/service-categories/active?country=${encodeURIComponent(country)}`,
-          { credentials: 'include' }
+          { credentials: 'include', signal: controller.signal }
         )
         if (!response.ok) {
           throw new Error(`Failed to fetch service categories: ${response.status}`)
@@ -313,14 +316,21 @@ export default function ProfilePage() {
         const items = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
         setServiceCatalog(items)
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return
         console.error('Failed to load service categories:', error)
         setServiceCatalogError('Failed to load service categories')
       } finally {
-        setServiceCatalogLoading(false)
+        if (!controller.signal.aborted) {
+          setServiceCatalogLoading(false)
+        }
       }
     }
 
     fetchServiceCatalog()
+
+    return () => {
+      controller.abort()
+    }
   }, [user?.role, user?.businessInfo?.country])
 
   useEffect(() => {
@@ -1052,10 +1062,7 @@ export default function ProfilePage() {
   }
 
   const hasIdInfoChanges = () => {
-    const rawCountry = user?.idCountryOfIssue || ''
-    const currentCountry = rawCountry.length === 2
-      ? rawCountry.toUpperCase()
-      : (EU_COUNTRIES.find((country) => country.name.toLowerCase() === rawCountry.toLowerCase())?.code || rawCountry)
+    const currentCountry = normalizeCountryCode(user?.idCountryOfIssue || '')
     const currentExpiry = user?.idExpirationDate ? user.idExpirationDate.split('T')[0] : ''
     return idCountryOfIssue !== currentCountry || idExpirationDate !== currentExpiry
   }
@@ -2589,7 +2596,7 @@ export default function ProfilePage() {
             <div className="space-y-3">
               <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm">
                 <p className="font-medium text-amber-800 mb-1">Changes to be submitted:</p>
-                {idCountryOfIssue !== (user?.idCountryOfIssue || '') && (
+                {idCountryOfIssue !== normalizeCountryCode(user?.idCountryOfIssue || '') && (
                   <p className="text-amber-700">
                     Country of Issue: {user?.idCountryOfIssue || '(empty)'} → {idCountryOfIssue || '(empty)'}
                   </p>
