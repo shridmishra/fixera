@@ -1,7 +1,68 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, RefreshCw } from 'lucide-react';
+
+// ─── Shared types ───────────────────────────────────────────────────────────
+
+type PaymentStatus = 'pending' | 'authorized' | 'completed' | 'failed' | 'refunded' | 'partially_refunded' | 'expired';
+
+const STATUS_STYLES: Record<PaymentStatus, string> = {
+  pending: 'bg-slate-50 text-slate-700 border border-slate-200',
+  authorized: 'bg-amber-50 text-amber-700 border border-amber-200',
+  completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  failed: 'bg-rose-50 text-rose-700 border border-rose-200',
+  refunded: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  partially_refunded: 'bg-blue-50 text-blue-700 border border-blue-200',
+  expired: 'bg-gray-100 text-gray-700 border border-gray-200',
+};
+
+const STATUS_OPTIONS: { label: string; value: 'all' | PaymentStatus }[] = [
+  { label: 'All statuses', value: 'all' },
+  { label: 'Pending', value: 'pending' },
+  { label: 'Authorized', value: 'authorized' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Refunded', value: 'refunded' },
+  { label: 'Failed', value: 'failed' },
+];
+
+// ─── Customer payment types ─────────────────────────────────────────────────
+
+interface CustomerPayment {
+  _id: string;
+  bookingNumber?: string;
+  booking?: {
+    _id: string;
+    bookingNumber?: string;
+    bookingType?: string;
+    status?: string;
+  };
+  professional?: {
+    _id: string;
+    name?: string;
+    email?: string;
+    businessInfo?: { companyName?: string };
+  };
+  status: PaymentStatus;
+  currency: string;
+  amount: number;
+  totalWithVat?: number;
+  createdAt?: string;
+}
+
+interface CustomerPaymentSummary {
+  totalPaid: number;
+  inEscrow: number;
+  refunded: number;
+}
+
+// ─── Professional types (existing) ──────────────────────────────────────────
 
 interface PaymentStats {
   totalEarnings: number;
@@ -29,7 +90,241 @@ interface Transaction {
   amount: number;
 }
 
-export default function ProfessionalPaymentsDashboard() {
+// ─── Main page component ────────────────────────────────────────────────────
+
+export default function PaymentsDashboard() {
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login?redirect=/dashboard/payments');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  if (authLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="h-32 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user?.role === 'customer') {
+    return <CustomerPaymentsView />;
+  }
+
+  return <ProfessionalPaymentsView />;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Customer Payment History
+// ═══════════════════════════════════════════════════════════════════════════
+
+function CustomerPaymentsView() {
+  const router = useRouter();
+  const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+
+  const [payments, setPayments] = useState<CustomerPayment[]>([]);
+  const [summary, setSummary] = useState<CustomerPaymentSummary>({ totalPaid: 0, inEscrow: 0, refunded: 0 });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPayments = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', '20');
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+
+      const response = await fetch(`${API_URL}/api/bookings/my-payments?${params.toString()}`, {
+        credentials: 'include',
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.msg || 'Failed to load payments');
+      }
+
+      setPayments(payload.data.payments);
+      setSummary(payload.data.summary);
+      setTotalPages(payload.data.pagination.totalPages || 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load payments');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [API_URL, page, statusFilter]);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
+
+  const PaymentStatusBadge = ({ status }: { status: PaymentStatus }) => (
+    <Badge variant="outline" className={`text-xs capitalize ${STATUS_STYLES[status] || 'bg-slate-100'}`}>
+      {status.replace(/_/g, ' ')}
+    </Badge>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-10 px-4">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Payment History</h1>
+            <p className="text-sm text-gray-600">View all your payments and their statuses.</p>
+          </div>
+          <Button variant="outline" onClick={fetchPayments} disabled={isLoading}>
+            {isLoading ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Refreshing</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-2" /> Refresh</>
+            )}
+          </Button>
+        </div>
+
+        {/* Summary cards */}
+        <div className="grid md:grid-cols-3 gap-3">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Total Paid</CardDescription>
+              <CardTitle className="text-2xl">
+                EUR {summary.totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-gray-500">Completed payments</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>In Escrow</CardDescription>
+              <CardTitle className="text-2xl">
+                EUR {summary.inEscrow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-gray-500">Authorized, awaiting completion</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Refunded</CardDescription>
+              <CardTitle className="text-2xl">
+                EUR {summary.refunded.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-gray-500">Total refunded amount</CardContent>
+          </Card>
+        </div>
+
+        {/* Payments table */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <CardTitle>Payments</CardTitle>
+              <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val as 'all' | PaymentStatus); setPage(1); }}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Filter status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {error && <p className="text-sm text-rose-600 mt-2">{error}</p>}
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16 text-sm text-gray-500">
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Loading payments...
+              </div>
+            ) : payments.length === 0 ? (
+              <div className="py-12 text-center text-sm text-gray-500">
+                No payments found.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-gray-600 text-xs uppercase tracking-wide">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Booking</th>
+                      <th className="px-4 py-3 text-left">Professional</th>
+                      <th className="px-4 py-3 text-left">Amount</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {payments.map((payment) => (
+                      <tr
+                        key={payment._id}
+                        className="hover:bg-slate-50/60 cursor-pointer"
+                        onClick={() => router.push(`/bookings/${payment.booking?._id || ''}`)}
+                      >
+                        <td className="px-4 py-4">
+                          <div className="font-medium text-gray-900">
+                            {payment.bookingNumber || payment.booking?.bookingNumber || '---'}
+                          </div>
+                          <div className="text-xs text-gray-500 capitalize">
+                            {payment.booking?.bookingType || 'n/a'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="font-medium text-gray-900">
+                            {payment.professional?.businessInfo?.companyName || payment.professional?.name || '---'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="font-semibold text-gray-900">
+                            {payment.currency} {(payment.totalWithVat ?? payment.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <PaymentStatusBadge status={payment.status} />
+                        </td>
+                        <td className="px-4 py-4 text-gray-600">
+                          {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString() : '---'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-gray-600">
+                <span>Page {page} of {totalPages}</span>
+                <div className="space-x-2">
+                  <Button variant="outline" size="sm" disabled={page === 1 || isLoading} onClick={() => setPage(p => Math.max(p - 1, 1))}>
+                    Previous
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages || isLoading} onClick={() => setPage(p => p + 1)}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Professional Payments View (preserved from original)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ProfessionalPaymentsView() {
   const router = useRouter();
   const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
   const [checkingAccount, setCheckingAccount] = useState(true);
@@ -49,15 +344,18 @@ export default function ProfessionalPaymentsDashboard() {
 
   const loadPaymentData = async () => {
     try {
-      // Load Stripe account status
       const accountResponse = await fetch(`${API_URL}/api/stripe/connect/account-status`, {
         credentials: 'include',
       });
 
       if (accountResponse.ok) {
         const accountData = await accountResponse.json();
-        if (accountData.success) {
-          setAccountStatus(accountData.data);
+        if (accountData.success && accountData.data) {
+          setAccountStatus({
+            ...accountData.data,
+            hasAccount: true,
+            isFullyOnboarded: accountData.data.onboardingCompleted && accountData.data.chargesEnabled,
+          });
         }
       }
     } catch (err) {
@@ -66,7 +364,6 @@ export default function ProfessionalPaymentsDashboard() {
       setCheckingAccount(false);
     }
 
-    // Try to load stats (optional - won't break if endpoint doesn't exist)
     try {
       const statsResponse = await fetch(`${API_URL}/api/professional/payment-stats`, {
         credentials: 'include',
@@ -79,11 +376,9 @@ export default function ProfessionalPaymentsDashboard() {
         }
       }
     } catch {
-      // Stats endpoint doesn't exist yet - that's fine
       console.log('Stats endpoint not available yet');
     }
 
-    // Try to load transactions (optional)
     try {
       const transactionsResponse = await fetch(`${API_URL}/api/professional/transactions?limit=10`, {
         credentials: 'include',
@@ -96,7 +391,6 @@ export default function ProfessionalPaymentsDashboard() {
         }
       }
     } catch {
-      // Transactions endpoint doesn't exist yet - that's fine
       console.log('Transactions endpoint not available yet');
     }
   };
@@ -107,16 +401,14 @@ export default function ProfessionalPaymentsDashboard() {
 
   const handleOpenDashboard = async () => {
     try {
-      const response = await fetch('/api/stripe/connect/dashboard-link', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+      const response = await fetch(`${API_URL}/api/stripe/connect/dashboard-link`, {
+        credentials: 'include',
       });
 
       const data = await response.json();
 
       if (data.success) {
-        window.open(data.url, '_blank');
+        window.open(data.data.url, '_blank');
       }
     } catch (err) {
       console.error('Error opening dashboard:', err);
@@ -134,20 +426,17 @@ export default function ProfessionalPaymentsDashboard() {
     );
   }
 
-  // Determine if Stripe is connected
   const hasAccount = accountStatus?.hasAccount || false;
   const isFullyOnboarded = accountStatus?.isFullyOnboarded || false;
   const needsSetup = !hasAccount || !isFullyOnboarded;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Payments</h1>
         <p className="text-gray-600 mt-1">Manage your Stripe account and view earnings</p>
       </div>
 
-      {/* Stripe Account Status */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-900">Stripe Account</h2>
@@ -156,7 +445,7 @@ export default function ProfessionalPaymentsDashboard() {
               onClick={handleOpenDashboard}
               className="text-blue-600 hover:text-blue-700 font-medium text-sm"
             >
-              Open Dashboard →
+              Open Dashboard &rarr;
             </button>
           )}
         </div>
@@ -226,7 +515,6 @@ export default function ProfessionalPaymentsDashboard() {
         )}
       </div>
 
-      {/* Earnings Summary - Only show if connected */}
       {isFullyOnboarded && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -276,7 +564,6 @@ export default function ProfessionalPaymentsDashboard() {
             </div>
           </div>
 
-          {/* Recent Transactions */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Transactions</h2>
 

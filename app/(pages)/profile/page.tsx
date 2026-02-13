@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { User, Mail, Phone, Shield, Calendar, Building, Check, X, AlertCircle, Loader2, Upload, FileText, CalendarX, Pencil, MapPin, AlertTriangle } from "lucide-react"
+import { User, Mail, Phone, Shield, Calendar, Building, Check, X, AlertCircle, Loader2, Upload, FileText, CalendarX, Pencil, MapPin, AlertTriangle, CreditCard } from "lucide-react"
 import EmployeeManagement from "@/components/TeamManagement"
 import PasswordChange from "@/components/PasswordChange"
 import EmployeeAvailability from "@/components/EmployeeAvailability"
@@ -1145,10 +1145,11 @@ export default function ProfilePage() {
 
         {isProfessional ? (
           <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="grid w-full grid-cols-7">
+            <TabsList className="grid w-full grid-cols-8">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="business">Business Info</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
+              <TabsTrigger value="payments">Payments</TabsTrigger>
               <TabsTrigger value="employees">Employees</TabsTrigger>
               <TabsTrigger value="personal-availability">Personal Availability</TabsTrigger>
               <TabsTrigger value="company-availability">Company Availability</TabsTrigger>
@@ -1692,6 +1693,33 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
             </TabsContent >
+
+            {/* Payments Tab - Stripe Setup */}
+            <TabsContent value="payments" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    Payment Setup
+                  </CardTitle>
+                  <CardDescription>
+                    Connect your Stripe account to receive payments from customers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Set up your Stripe account to start accepting payments. You&apos;ll be guided through Stripe&apos;s secure onboarding process.
+                  </p>
+                  <Button
+                    onClick={() => router.push('/professional/stripe/setup')}
+                    className="w-full sm:w-auto"
+                  >
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Go to Stripe Setup
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             {/* Personal Availability Tab */}
             < TabsContent value="personal-availability" className="space-y-6" >

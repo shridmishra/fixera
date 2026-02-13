@@ -8,7 +8,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, RefreshCw, Search, ShieldCheck, CalendarClock } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Loader2, RefreshCw, Search, ShieldCheck, CalendarClock, ArrowRightLeft, Undo2 } from "lucide-react"
+import { toast } from "sonner"
 
 type PaymentStatus = "pending" | "authorized" | "completed" | "failed" | "refunded" | "partially_refunded" | "expired"
 
@@ -103,6 +106,15 @@ export default function AdminPaymentsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Action states
+  const [captureDialogPayment, setCaptureDialogPayment] = useState<PaymentRecord | null>(null)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [refundDialogPayment, setRefundDialogPayment] = useState<PaymentRecord | null>(null)
+  const [isRefunding, setIsRefunding] = useState(false)
+  const [refundReason, setRefundReason] = useState("")
+  const [refundAmount, setRefundAmount] = useState("")
+  const [refundType, setRefundType] = useState<"full" | "partial">("full")
+
   const fetchPayments = useCallback(async () => {
     if (!isAuthenticated || user?.role !== "admin") return
     setIsLoading(true)
@@ -166,6 +178,77 @@ export default function AdminPaymentsPage() {
     fetchPayments()
   }
 
+  // ─── Capture (Release Payment) ──────────────────────────────────────────
+
+  const handleCapture = async () => {
+    if (!captureDialogPayment) return
+    setIsCapturing(true)
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/payments/${captureDialogPayment._id}/capture`,
+        { method: "POST", credentials: "include" }
+      )
+      const payload = await response.json()
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.msg || "Failed to capture payment")
+      }
+      toast.success("Payment captured and transferred successfully")
+      setCaptureDialogPayment(null)
+      fetchPayments()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to capture payment")
+    } finally {
+      setIsCapturing(false)
+    }
+  }
+
+  // ─── Refund ─────────────────────────────────────────────────────────────
+
+  const openRefundDialog = (payment: PaymentRecord) => {
+    setRefundDialogPayment(payment)
+    setRefundReason("")
+    setRefundAmount("")
+    setRefundType("full")
+  }
+
+  const handleRefund = async () => {
+    if (!refundDialogPayment?.booking?._id) return
+    setIsRefunding(true)
+    try {
+      const body: { bookingId: string; reason: string; amount?: number } = {
+        bookingId: refundDialogPayment.booking._id,
+        reason: refundReason || "Admin initiated refund",
+      }
+      if (refundType === "partial" && refundAmount) {
+        body.amount = parseFloat(refundAmount)
+        if (isNaN(body.amount) || body.amount <= 0) {
+          throw new Error("Invalid refund amount")
+        }
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/stripe/payment/refund`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      )
+      const payload = await response.json()
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.msg || "Failed to process refund")
+      }
+      toast.success(payload.msg || "Refund processed successfully")
+      setRefundDialogPayment(null)
+      fetchPayments()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to process refund")
+    } finally {
+      setIsRefunding(false)
+    }
+  }
+
   const PaymentStatusBadge = ({ status }: { status: PaymentStatus }) => (
     <Badge variant="outline" className={`text-xs capitalize ${STATUS_STYLES[status] || "bg-slate-100"}`}>
       {status.replace(/_/g, " ")}
@@ -184,6 +267,9 @@ export default function AdminPaymentsPage() {
       </div>
     )
   }
+
+  const canCapture = (p: PaymentRecord) => p.status === "authorized"
+  const canRefund = (p: PaymentRecord) => p.status === "authorized" || p.status === "completed"
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-10 px-4">
@@ -214,7 +300,7 @@ export default function AdminPaymentsPage() {
               <CardHeader className="pb-2">
                 <CardDescription>Completed payouts</CardDescription>
                 <CardTitle className="text-2xl">
-                  €{(summary.completed?.volume || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  EUR {(summary.completed?.volume || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-gray-500">
@@ -225,7 +311,7 @@ export default function AdminPaymentsPage() {
               <CardHeader className="pb-2">
                 <CardDescription>Authorized funds</CardDescription>
                 <CardTitle className="text-2xl">
-                  €{(summary.authorized?.volume || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  EUR {(summary.authorized?.volume || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-gray-500">
@@ -236,7 +322,7 @@ export default function AdminPaymentsPage() {
               <CardHeader className="pb-2">
                 <CardDescription>Refunds processed</CardDescription>
                 <CardTitle className="text-2xl">
-                  €{(summary.refunded?.volume || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  EUR {(summary.refunded?.volume || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-gray-500">
@@ -302,6 +388,7 @@ export default function AdminPaymentsPage() {
                       <th className="px-4 py-3 text-left">Status</th>
                       <th className="px-4 py-3 text-left">Timeline</th>
                       <th className="px-4 py-3 text-left">Stripe IDs</th>
+                      <th className="px-4 py-3 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -309,10 +396,10 @@ export default function AdminPaymentsPage() {
                       <tr key={payment._id} className="hover:bg-slate-50/60">
                         <td className="px-4 py-4">
                           <div className="font-medium text-gray-900">
-                            {payment.bookingNumber || payment.booking?.bookingNumber || "—"}
+                            {payment.bookingNumber || payment.booking?.bookingNumber || "\u2014"}
                           </div>
                           <div className="text-xs text-gray-500 capitalize">
-                            {payment.booking?.bookingType || "n/a"} • {payment.booking?.status || "unknown"}
+                            {payment.booking?.bookingType || "n/a"} &bull; {payment.booking?.status || "unknown"}
                           </div>
                           <Button
                             variant="link"
@@ -324,12 +411,12 @@ export default function AdminPaymentsPage() {
                           </Button>
                         </td>
                         <td className="px-4 py-4 text-sm">
-                          <div className="font-medium text-gray-900">{payment.customer?.name || "—"}</div>
+                          <div className="font-medium text-gray-900">{payment.customer?.name || "\u2014"}</div>
                           <div className="text-xs text-gray-500">{payment.customer?.email}</div>
                         </td>
                         <td className="px-4 py-4 text-sm">
                           <div className="font-medium text-gray-900">
-                            {payment.professional?.businessInfo?.companyName || payment.professional?.name || "—"}
+                            {payment.professional?.businessInfo?.companyName || payment.professional?.name || "\u2014"}
                           </div>
                           <div className="text-xs text-gray-500">{payment.professional?.email}</div>
                         </td>
@@ -377,9 +464,38 @@ export default function AdminPaymentsPage() {
                           ) : null}
                         </td>
                         <td className="px-4 py-4 text-xs text-gray-600">
-                          <div>PI: {payment.stripePaymentIntentId || "—"}</div>
-                          <div>Charge: {payment.stripeChargeId || "—"}</div>
-                          <div>Transfer: {payment.stripeTransferId || "—"}</div>
+                          <div>PI: {payment.stripePaymentIntentId || "\u2014"}</div>
+                          <div>Charge: {payment.stripeChargeId || "\u2014"}</div>
+                          <div>Transfer: {payment.stripeTransferId || "\u2014"}</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col gap-2">
+                            {canCapture(payment) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                onClick={() => setCaptureDialogPayment(payment)}
+                              >
+                                <ArrowRightLeft className="h-3 w-3 mr-1" />
+                                Release Payment
+                              </Button>
+                            )}
+                            {canRefund(payment) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs border-rose-300 text-rose-700 hover:bg-rose-50"
+                                onClick={() => openRefundDialog(payment)}
+                              >
+                                <Undo2 className="h-3 w-3 mr-1" />
+                                Refund
+                              </Button>
+                            )}
+                            {!canCapture(payment) && !canRefund(payment) && (
+                              <span className="text-xs text-gray-400">No actions</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -413,6 +529,131 @@ export default function AdminPaymentsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ─── Capture Confirmation Dialog ─────────────────────────────────── */}
+      <Dialog open={!!captureDialogPayment} onOpenChange={(open) => { if (!open) setCaptureDialogPayment(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Release Payment</DialogTitle>
+            <DialogDescription>
+              This will capture the authorized funds and transfer the payout to the professional.
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {captureDialogPayment && (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Booking</span>
+                <span className="font-medium">{captureDialogPayment.bookingNumber || captureDialogPayment.booking?.bookingNumber || "\u2014"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Amount</span>
+                <span className="font-medium">
+                  {captureDialogPayment.currency} {(captureDialogPayment.totalWithVat ?? captureDialogPayment.amount).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Professional payout</span>
+                <span className="font-medium">{captureDialogPayment.professionalPayout?.toFixed(2) || "0.00"}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCaptureDialogPayment(null)} disabled={isCapturing}>
+              Cancel
+            </Button>
+            <Button onClick={handleCapture} disabled={isCapturing} className="bg-emerald-600 hover:bg-emerald-700">
+              {isCapturing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Capturing...</> : "Confirm Release"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Refund Dialog ───────────────────────────────────────────────── */}
+      <Dialog open={!!refundDialogPayment} onOpenChange={(open) => { if (!open) setRefundDialogPayment(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refund Payment</DialogTitle>
+            <DialogDescription>
+              {refundDialogPayment?.status === "authorized"
+                ? "This will cancel the authorized payment intent. The hold on the customer\u2019s card will be released."
+                : "This will create a Stripe refund and reverse the transfer to the professional."
+              }
+            </DialogDescription>
+          </DialogHeader>
+          {refundDialogPayment && (
+            <div className="space-y-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Booking</span>
+                  <span className="font-medium">{refundDialogPayment.bookingNumber || refundDialogPayment.booking?.bookingNumber || "\u2014"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total charged</span>
+                  <span className="font-medium">
+                    {refundDialogPayment.currency} {(refundDialogPayment.totalWithVat ?? refundDialogPayment.amount).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {refundDialogPayment.status === "completed" && (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium">Refund type</Label>
+                    <Select value={refundType} onValueChange={(val) => setRefundType(val as "full" | "partial")}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="full">Full refund</SelectItem>
+                        <SelectItem value="partial">Partial refund</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {refundType === "partial" && (
+                    <div>
+                      <Label className="text-sm font-medium">Refund amount ({refundDialogPayment.currency})</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={refundDialogPayment.totalWithVat ?? refundDialogPayment.amount}
+                        placeholder="0.00"
+                        className="mt-1"
+                        value={refundAmount}
+                        onChange={(e) => setRefundAmount(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <Label className="text-sm font-medium">Reason</Label>
+                <Input
+                  placeholder="Reason for refund"
+                  className="mt-1"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundDialogPayment(null)} disabled={isRefunding}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRefund}
+              disabled={isRefunding || (refundType === "partial" && !refundAmount)}
+              variant="destructive"
+            >
+              {isRefunding ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : "Confirm Refund"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
