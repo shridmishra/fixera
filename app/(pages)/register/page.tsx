@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, User, Mail, Phone, Lock, Shield } from "lucide-react"
+import { ArrowLeft, User, Mail, Phone, Lock, Briefcase } from "lucide-react"
 import { toast } from "sonner"
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -22,7 +22,6 @@ interface FormData {
   countryCode: string
   password: string
   confirmPassword: string
-  role: 'customer' | 'professional'
 }
 
 export default function RegisterPage() {
@@ -34,7 +33,6 @@ export default function RegisterPage() {
     countryCode: '+32',
     password: '',
     confirmPassword: '',
-    role: 'customer'
   })
   const [loading, setLoading] = useState(false)
   const { signup } = useAuth()
@@ -81,7 +79,7 @@ export default function RegisterPage() {
         email: formData.email.trim().toLowerCase(),
         phone: formData.countryCode + formData.phone.trim(),
         password: formData.password,
-        role: formData.role
+        role: 'professional'
       })
 
       if (success) {
@@ -95,13 +93,7 @@ export default function RegisterPage() {
   }
   const handleVerificationSuccess = () => {
     toast.success('Account verified successfully!')
-
-    // Redirect based on role
-    if (formData.role === 'professional') {
-      router.push('/profile?welcome=true')
-    } else {
-      router.push('/dashboard?welcome=true')
-    }
+    router.push('/professional/onboarding?welcome=true')
   }
 
   const handleInputChange = (field: keyof FormData, value: string) => {
@@ -139,35 +131,18 @@ export default function RegisterPage() {
         <Card className="shadow-xl border-0">
           <CardHeader className="text-center pb-6">
             <div className="flex items-center justify-center mb-4">
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Shield className="h-8 w-8 text-blue-600" />
+              <div className="p-3 bg-purple-100 rounded-full">
+                <Briefcase className="h-8 w-8 text-purple-600" />
               </div>
             </div>
             <CardTitle className="text-2xl font-bold text-gray-900">Create Your Account</CardTitle>
             <CardDescription className="text-gray-600">
-              Join thousands of satisfied customers and professionals on Fixera
+              Join Fixera as a professional and grow your business
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Role Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="role">I want to join as</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(value: 'customer' | 'professional') => handleInputChange('role', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="customer">Customer - Find services</SelectItem>
-                    <SelectItem value="professional">Professional - Offer services</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               {/* Full Name */}
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
@@ -270,15 +245,12 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Professional Info */}
-              {formData.role === 'professional' && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-700 font-medium">Welcome, Professional!</p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    After verification, you&apos;ll complete your business profile including VAT validation and ID verification.
-                  </p>
-                </div>
-              )}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700 font-medium">Welcome, Professional!</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  After verification, you&apos;ll complete your business profile including VAT validation and ID verification.
+                </p>
+              </div>
 
               <Button
                 type="submit"
