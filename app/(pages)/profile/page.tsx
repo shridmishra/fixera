@@ -549,12 +549,7 @@ export default function ProfilePage() {
       const result = await updateUserVAT(vatNumber)
 
       if (result.success) {
-        // For business customers, also save business name and company address
-        if (user.role === 'customer' && customerType === 'business') {
-          await handleCustomerProfileUpdate()
-        } else {
-          toast.success(vatNumber ? 'VAT number updated successfully' : 'VAT number removed successfully')
-        }
+        toast.success(vatNumber ? 'VAT number updated successfully' : 'VAT number removed successfully')
         // Refresh user data
         await checkAuth()
         setVatValidation({})
@@ -2294,8 +2289,7 @@ export default function ProfilePage() {
                         Address Information
                       </CardTitle>
                       <CardDescription>
-                        Your address details
-                        {customerType === 'business' && ' and business information'}
+                        Your personal address details
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -2397,13 +2391,14 @@ export default function ProfilePage() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Building className="h-5 w-5" />
-                        VAT Information
+                        VAT &amp; Business Information
                       </CardTitle>
                       <CardDescription>
-                        Add your VAT number for EU tax compliance and invoicing.
+                        Add your VAT number for EU tax compliance and invoicing. Business name and company address will be prefilled after VAT validation.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* VAT Number Section */}
                       <div className="space-y-2">
                         <Label htmlFor="customer-vatNumber">VAT Number</Label>
                         <div className="flex gap-2">
@@ -2432,7 +2427,56 @@ export default function ProfilePage() {
                         </div>
                       </div>
 
-                      <div className="space-y-4">
+                      {/* Validation Results */}
+                      {vatValidation.valid !== undefined && (
+                        <div className={`p-3 rounded-lg border ${vatValidation.valid
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-red-50 border-red-200'
+                          }`}>
+                          <div className="flex items-start gap-2">
+                            {vatValidation.valid ? (
+                              <Check className="h-4 w-4 text-green-600 mt-0.5" />
+                            ) : (
+                              <X className="h-4 w-4 text-red-600 mt-0.5" />
+                            )}
+                            <div className="flex-1 text-sm">
+                              {vatValidation.valid ? (
+                                <p className="font-medium text-green-800">VAT number is valid</p>
+                              ) : (
+                                <p className="text-red-700">{vatValidation.error}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* VAT Save/Remove buttons */}
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={saveVatNumber}
+                          disabled={!hasVatChanges || vatSaving}
+                          className="flex-1"
+                        >
+                          {vatSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Saving...
+                            </>
+                          ) : (
+                            vatNumber ? 'Save VAT Number' : 'Remove VAT Number'
+                          )}
+                        </Button>
+                        {user?.vatNumber && (
+                          <Button onClick={removeVatNumber} disabled={vatSaving} variant="outline">
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Business Name & Company Address Section */}
+                      <div className="border-t pt-4 mt-2 space-y-4">
+                        <h4 className="text-sm font-medium">Business Name &amp; Company Address</h4>
+                        <p className="text-xs text-muted-foreground">These fields are automatically prefilled when you validate your VAT number.</p>
                         <div className="space-y-2">
                           <Label htmlFor="customer-businessName">Business Name</Label>
                           <Input
@@ -2480,50 +2524,20 @@ export default function ProfilePage() {
                             />
                           </div>
                         </div>
-                      </div>
-
-                      {vatValidation.valid !== undefined && (
-                        <div className={`p-3 rounded-lg border ${vatValidation.valid
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-red-50 border-red-200'
-                          }`}>
-                          <div className="flex items-start gap-2">
-                            {vatValidation.valid ? (
-                              <Check className="h-4 w-4 text-green-600 mt-0.5" />
-                            ) : (
-                              <X className="h-4 w-4 text-red-600 mt-0.5" />
-                            )}
-                            <div className="flex-1 text-sm">
-                              {vatValidation.valid ? (
-                                <p className="font-medium text-green-800">VAT number is valid</p>
-                              ) : (
-                                <p className="text-red-700">{vatValidation.error}</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
                         <Button
-                          onClick={saveVatNumber}
-                          disabled={!hasVatChanges || vatSaving}
-                          className="flex-1"
+                          onClick={handleCustomerProfileUpdate}
+                          disabled={customerProfileSaving}
+                          className="w-full"
                         >
-                          {vatSaving ? (
+                          {customerProfileSaving ? (
                             <>
                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
                               Saving...
                             </>
                           ) : (
-                            vatNumber ? 'Save VAT Number' : 'Remove VAT Number'
+                            'Save Business Info'
                           )}
                         </Button>
-                        {user?.vatNumber && (
-                          <Button onClick={removeVatNumber} disabled={vatSaving} variant="outline">
-                            Remove
-                          </Button>
-                        )}
                       </div>
                     </CardContent>
                   </Card>
