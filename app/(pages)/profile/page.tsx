@@ -544,18 +544,29 @@ export default function ProfilePage() {
 
       // Auto-prefill company info for business customers
       if (result.valid && user?.role === 'customer' && customerType === 'business') {
+        let changed = false
         if (result.companyName && !customerBusinessName) {
           setCustomerBusinessName(result.companyName)
+          changed = true
         }
         if (result.parsedAddress) {
-          setCustomerCompanyAddress(prev => ({
-            address: prev.address || result.parsedAddress?.streetAddress || '',
-            city: prev.city || result.parsedAddress?.city || '',
-            country: prev.country || result.parsedAddress?.country || '',
-            postalCode: prev.postalCode || result.parsedAddress?.postalCode || ''
-          }))
+          const pa = result.parsedAddress
+          const wouldUpdate =
+            (!customerCompanyAddress.address && pa.streetAddress) ||
+            (!customerCompanyAddress.city && pa.city) ||
+            (!customerCompanyAddress.country && pa.country) ||
+            (!customerCompanyAddress.postalCode && pa.postalCode)
+          if (wouldUpdate) {
+            setCustomerCompanyAddress(prev => ({
+              address: prev.address || pa.streetAddress || '',
+              city: prev.city || pa.city || '',
+              country: prev.country || pa.country || '',
+              postalCode: prev.postalCode || pa.postalCode || ''
+            }))
+            changed = true
+          }
         }
-        if (result.companyName || result.parsedAddress) {
+        if (changed) {
           toast.success('Business information prefilled from VAT validation')
         }
       }
@@ -937,12 +948,23 @@ export default function ProfilePage() {
   }
 
   const removeCompanyBlockedRange = async (indexToRemove: number) => {
+    const removedRange = companyBlockedRanges[indexToRemove]
     const updatedRanges = companyBlockedRanges.filter((_, index) => index !== indexToRemove)
     setCompanyBlockedRanges(updatedRanges)
 
     const success = await saveCompanyBlockedRanges(updatedRanges)
     if (success) {
-      toast.success('Company blocked period removed and saved')
+      toast.success('Company blocked period removed', {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            const restoredRanges = [...updatedRanges]
+            restoredRanges.splice(indexToRemove, 0, removedRange)
+            setCompanyBlockedRanges(restoredRanges)
+            await saveCompanyBlockedRanges(restoredRanges)
+          }
+        }
+      })
     }
   }
 
@@ -1067,6 +1089,7 @@ export default function ProfilePage() {
         body.companyAddress = customerCompanyAddress
       } else {
         body.businessName = ''
+        body.companyAddress = { address: '', city: '', country: '', postalCode: '' }
       }
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/customer-profile`, {

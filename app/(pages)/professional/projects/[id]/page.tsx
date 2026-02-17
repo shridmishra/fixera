@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback } from "react"
 import Image from "next/image"
 import MeetingScheduler from "@/components/professional/meetings/MeetingScheduler"
 import WeeklyAvailabilityCalendar, { type CalendarEvent } from "@/components/calendar/WeeklyAvailabilityCalendar"
+import { getAuthToken } from "@/lib/utils"
 import {
   ArrowLeft,
   Calendar,
@@ -252,9 +253,11 @@ export default function ProjectDetailPage() {
     const fetchBookingsAndHours = async () => {
       try {
         // Fetch bookings and working hours in parallel
+        const token = getAuthToken()
         const [bookingsRes, hoursRes] = await Promise.all([
           fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/bookings/my-bookings?limit=100`, {
             credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
             signal
           }),
           fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/projects/${project._id}/working-hours`, {
