@@ -39,6 +39,24 @@ function normalizeCountryCode(raw: string): string {
   return EU_COUNTRIES.find((c) => c.name.toLowerCase() === raw.toLowerCase())?.code || raw
 }
 
+function toEventDate(value: string, isEnd = false): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number)
+    return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0)
+  }
+  return new Date(value)
+}
+
+const DAY_LABEL_BY_INDEX: Record<number, string> = {
+  0: 'Sun',
+  1: 'Mon',
+  2: 'Tue',
+  3: 'Wed',
+  4: 'Thu',
+  5: 'Fri',
+  6: 'Sat',
+}
+
 export default function ProfilePage() {
   const { user, isAuthenticated, loading, checkAuth } = useAuth()
   const router = useRouter()
@@ -1117,13 +1135,6 @@ export default function ProfilePage() {
   }
 
   const calendarEvents = useMemo(() => {
-    const toEventDate = (value: string, isEnd = false) => {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        const [year, month, day] = value.split('-').map(Number)
-        return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0)
-      }
-      return new Date(value)
-    }
     const personalEvents: CalendarEvent[] = blockedRanges.map((range, index) => ({
       id: `personal-${index}`,
       type: 'personal',
@@ -1144,47 +1155,19 @@ export default function ProfilePage() {
     return [...companyEvents, ...bookingEvents, ...personalEvents]
   }, [blockedRanges, companyBlockedRanges, bookingEvents])
 
-  const personalScheduleWindow = useMemo(
+  const scheduleWindow = useMemo(
     () => getScheduleWindow(companyAvailability),
     [companyAvailability]
   )
-  const personalVisibleDays = useMemo(
+  const visibleDays = useMemo(
     () => getVisibleScheduleDays(companyAvailability),
     [companyAvailability]
   )
-  const dayLabelByIndex: Record<number, string> = {
-    0: 'Sun',
-    1: 'Mon',
-    2: 'Tue',
-    3: 'Wed',
-    4: 'Thu',
-    5: 'Fri',
-    6: 'Sat',
-  }
-  const personalVisibleDaysLabel = personalVisibleDays
-    .map((dayIndex) => dayLabelByIndex[dayIndex] || '')
-    .filter(Boolean)
-    .join(', ')
-  const companyScheduleWindow = useMemo(
-    () => getScheduleWindow(companyAvailability),
-    [companyAvailability]
-  )
-  const companyVisibleDays = useMemo(
-    () => getVisibleScheduleDays(companyAvailability),
-    [companyAvailability]
-  )
-  const companyVisibleDaysLabel = companyVisibleDays
-    .map((dayIndex) => dayLabelByIndex[dayIndex] || '')
+  const visibleDaysLabel = visibleDays
+    .map((dayIndex) => DAY_LABEL_BY_INDEX[dayIndex] || '')
     .filter(Boolean)
     .join(', ')
   const companyCalendarEvents = useMemo<CalendarEvent[]>(() => {
-    const toEventDate = (value: string, isEnd = false) => {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return new Date(`${value}T${isEnd ? '23:59:59' : '00:00:00'}`)
-      }
-      return new Date(value)
-    }
-
     const events: CalendarEvent[] = []
     companyBlockedRanges.forEach((range, index) => {
       const start = toEventDate(range.startDate, false)
@@ -1964,9 +1947,9 @@ export default function ProfilePage() {
                     title="Weekly Availability"
                     description="Booking details are shown inside each block. Click personal blocks to edit."
                     events={calendarEvents}
-                    dayStart={personalScheduleWindow.dayStart}
-                    dayEnd={personalScheduleWindow.dayEnd}
-                    visibleDays={personalVisibleDays}
+                    dayStart={scheduleWindow.dayStart}
+                    dayEnd={scheduleWindow.dayEnd}
+                    visibleDays={visibleDays}
                     onEventClick={(event) => {
                       if (event.type === 'personal' && typeof event.meta?.rangeIndex === 'number') {
                         openEditRange(event.meta.rangeIndex)
@@ -1989,7 +1972,7 @@ export default function ProfilePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                    Calendar window: {personalVisibleDaysLabel || 'Mon-Fri'} - {personalScheduleWindow.dayStart} to {personalScheduleWindow.dayEnd}
+                    Calendar window: {visibleDaysLabel || 'Mon-Fri'} - {scheduleWindow.dayStart} to {scheduleWindow.dayEnd}
                   </div>
                 </CardContent>
               </Card>
@@ -2077,9 +2060,9 @@ export default function ProfilePage() {
                     title="Company Closures Calendar"
                     description="Click a closure block to remove it."
                     events={companyCalendarEvents}
-                    dayStart={companyScheduleWindow.dayStart}
-                    dayEnd={companyScheduleWindow.dayEnd}
-                    visibleDays={companyVisibleDays}
+                    dayStart={scheduleWindow.dayStart}
+                    dayEnd={scheduleWindow.dayEnd}
+                    visibleDays={visibleDays}
                     onEventClick={(event) => {
                       if (event.type === 'company' && typeof event.meta?.rangeIndex === 'number') {
                         removeCompanyBlockedRange(event.meta.rangeIndex)
@@ -2149,7 +2132,7 @@ export default function ProfilePage() {
                   ))}
 
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                    Calendar window: {companyVisibleDaysLabel || 'Mon-Fri'} - {companyScheduleWindow.dayStart} to {companyScheduleWindow.dayEnd}
+                    Calendar window: {visibleDaysLabel || 'Mon-Fri'} - {scheduleWindow.dayStart} to {scheduleWindow.dayEnd}
                   </div>
 
                   <Button
