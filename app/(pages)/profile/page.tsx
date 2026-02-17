@@ -77,8 +77,8 @@ export default function ProfilePage() {
   const [serviceCatalog, setServiceCatalog] = useState<Array<{ name: string; services: Array<{ name: string }> }>>([])
   const [serviceCatalogLoading, setServiceCatalogLoading] = useState(false)
   const [serviceCatalogError, setServiceCatalogError] = useState<string | null>(null)
-  const [blockedRanges, setBlockedRanges] = useState<{startDate: string, endDate: string, reason?: string}[]>([])
-  const [newBlockedRange, setNewBlockedRange] = useState({startDate: '', endDate: '', reason: ''})
+  const [blockedRanges, setBlockedRanges] = useState<{ startDate: string, endDate: string, reason?: string }[]>([])
+  const [newBlockedRange, setNewBlockedRange] = useState({ startDate: '', endDate: '', reason: '' })
 
   // Company availability (for team members to inherit)
   const [companyAvailability, setCompanyAvailability] = useState<CompanyAvailability>(DEFAULT_COMPANY_AVAILABILITY)
@@ -549,7 +549,12 @@ export default function ProfilePage() {
       const result = await updateUserVAT(vatNumber)
 
       if (result.success) {
-        toast.success(vatNumber ? 'VAT number updated successfully' : 'VAT number removed successfully')
+        // For business customers, also save business name and company address
+        if (user.role === 'customer' && customerType === 'business') {
+          await handleCustomerProfileUpdate()
+        } else {
+          toast.success(vatNumber ? 'VAT number updated successfully' : 'VAT number removed successfully')
+        }
         // Refresh user data
         await checkAuth()
         setVatValidation({})
@@ -2364,62 +2369,7 @@ export default function ProfilePage() {
                         </div>
                       </div>
 
-                      {customerType === 'business' && (
-                        <>
-                          <div className="border-t pt-4 mt-4">
-                            <h4 className="text-sm font-medium mb-3">Business Information</h4>
-                            <div className="space-y-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="customer-businessName">Business Name</Label>
-                                <Input
-                                  id="customer-businessName"
-                                  value={customerBusinessName}
-                                  onChange={(e) => setCustomerBusinessName(e.target.value)}
-                                  placeholder="Your business name"
-                                />
-                              </div>
-                              <div className="grid md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="company-address">Company Address</Label>
-                                  <Input
-                                    id="company-address"
-                                    value={customerCompanyAddress.address}
-                                    onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, address: e.target.value }))}
-                                    placeholder="Company street address"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="company-city">Company City</Label>
-                                  <Input
-                                    id="company-city"
-                                    value={customerCompanyAddress.city}
-                                    onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, city: e.target.value }))}
-                                    placeholder="City"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="company-country">Company Country</Label>
-                                  <Input
-                                    id="company-country"
-                                    value={customerCompanyAddress.country}
-                                    onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, country: e.target.value }))}
-                                    placeholder="Country"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="company-postalCode">Company Postal Code</Label>
-                                  <Input
-                                    id="company-postalCode"
-                                    value={customerCompanyAddress.postalCode}
-                                    onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, postalCode: e.target.value }))}
-                                    placeholder="Postal Code"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
+
 
                       <Button
                         onClick={handleCustomerProfileUpdate}
@@ -2479,6 +2429,56 @@ export default function ProfilePage() {
                               'Validate'
                             )}
                           </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="customer-businessName">Business Name</Label>
+                          <Input
+                            id="customer-businessName"
+                            value={customerBusinessName}
+                            onChange={(e) => setCustomerBusinessName(e.target.value)}
+                            placeholder="Your business name"
+                          />
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="company-address">Company Address</Label>
+                            <Input
+                              id="company-address"
+                              value={customerCompanyAddress.address}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, address: e.target.value }))}
+                              placeholder="Company street address"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="company-city">Company City</Label>
+                            <Input
+                              id="company-city"
+                              value={customerCompanyAddress.city}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, city: e.target.value }))}
+                              placeholder="City"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="company-country">Company Country</Label>
+                            <Input
+                              id="company-country"
+                              value={customerCompanyAddress.country}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, country: e.target.value }))}
+                              placeholder="Country"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="company-postalCode">Company Postal Code</Label>
+                            <Input
+                              id="company-postalCode"
+                              value={customerCompanyAddress.postalCode}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, postalCode: e.target.value }))}
+                              placeholder="Postal Code"
+                            />
+                          </div>
                         </div>
                       </div>
 
