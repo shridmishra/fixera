@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback } from "react"
 import Image from "next/image"
 import MeetingScheduler from "@/components/professional/meetings/MeetingScheduler"
 import WeeklyAvailabilityCalendar, { type CalendarEvent } from "@/components/calendar/WeeklyAvailabilityCalendar"
+import { getAuthToken } from "@/lib/utils"
 import {
   ArrowLeft,
   Calendar,
@@ -237,21 +238,42 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (!project || !user) return
 
+    const controller = new AbortController()
+    const { signal } = controller
+    let mounted = true
+
+    const resetCalendarState = () => {
+      if (!mounted || signal.aborted) return
+      setBookingEvents([])
+      setCalendarDayStart('09:00')
+      setCalendarDayEnd('17:00')
+      setCalendarVisibleDays([1, 2, 3, 4, 5])
+    }
+
     const fetchBookingsAndHours = async () => {
       try {
         // Fetch bookings and working hours in parallel
+        const token = getAuthToken()
         const [bookingsRes, hoursRes] = await Promise.all([
           fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/bookings/my-bookings?limit=100`, {
-            credentials: 'include'
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            signal
           }),
-          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/projects/${project._id}/working-hours`)
+          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/projects/${project._id}/working-hours`, {
+            signal
+          })
         ])
 
-        // Process bookings into calendar events
+        // Process bookings and hours independently
+        const events: CalendarEvent[] = []
+
+        // Process bookings (independent of hours response)
         if (bookingsRes.ok) {
           const bookingsData = await bookingsRes.json()
+          if (!mounted || signal.aborted) return
+
           const bookings = bookingsData.bookings || []
-          const events: CalendarEvent[] = []
 
           for (const booking of bookings) {
             if (!booking.scheduledStartDate) continue
@@ -303,17 +325,34 @@ export default function ProjectDetailPage() {
                   title: 'Buffer',
                   start: bufferStart,
                   end: bufferEnd,
+                  meta: {
+                    bookingId: booking._id,
+                    bookingNumber: booking.bookingNumber,
+                    customerName,
+                    location: loc ? {
+                      address: loc.address,
+                      city: loc.city,
+                      country: loc.country,
+                      postalCode: loc.postalCode,
+                    } : undefined,
+                  },
                   readOnly: true,
                 })
               }
             }
           }
-          setBookingEvents(events)
         }
 
-        // Process working hours for dynamic calendar range
+        // Process working hours (independent of bookings response)
+        let nextDayStart = '09:00'
+        let nextDayEnd = '17:00'
+        let nextVisibleDays: number[] = [1, 2, 3, 4, 5]
+
         if (hoursRes.ok) {
           const hoursData = await hoursRes.json()
+          if (!mounted || signal.aborted) return
+
+
           if (hoursData.success && hoursData.availability) {
             const avail = hoursData.availability
             const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
@@ -331,18 +370,31 @@ export default function ProjectDetailPage() {
             })
 
             if (activeDayIndices.length > 0) {
-              setCalendarDayStart(earliest)
-              setCalendarDayEnd(latest)
-              setCalendarVisibleDays(activeDayIndices)
+              nextDayStart = earliest
+              nextDayEnd = latest
+              nextVisibleDays = activeDayIndices
             }
           }
         }
+
+        if (!mounted || signal.aborted) return
+        setBookingEvents(events)
+        setCalendarDayStart(nextDayStart)
+        setCalendarDayEnd(nextDayEnd)
+        setCalendarVisibleDays(nextVisibleDays)
       } catch (err) {
+        if (signal.aborted) return
         console.error('Failed to fetch bookings/hours for calendar:', err)
+        resetCalendarState()
       }
     }
 
     fetchBookingsAndHours()
+
+    return () => {
+      mounted = false
+      controller.abort()
+    }
   }, [project, user, refreshMeetings])
 
   const fetchProject = useCallback(async () => {

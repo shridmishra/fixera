@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { User, Mail, Phone, Shield, Calendar, Building, Check, X, AlertCircle, Loader2, Upload, FileText, CalendarX, Pencil, MapPin, AlertTriangle, CreditCard } from "lucide-react"
 import EmployeeManagement from "@/components/TeamManagement"
@@ -18,6 +19,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getAuthToken } from "@/lib/utils"
+import { EU_COUNTRIES } from "@/lib/countries"
+import { CompanyAvailability, DEFAULT_COMPANY_AVAILABILITY } from "@/lib/defaults/companyAvailability"
 import {
   validateVATFormat,
   validateVATWithAPI,
@@ -31,6 +34,29 @@ import {
 import { toLocalInputValue } from "@/lib/dateUtils"
 import { getScheduleWindow, getVisibleScheduleDays } from "@/lib/scheduleUtils"
 
+
+function normalizeCountryCode(raw: string): string {
+  if (raw.length === 2) return raw.toUpperCase()
+  return EU_COUNTRIES.find((c) => c.name.toLowerCase() === raw.toLowerCase())?.code || raw
+}
+
+function toEventDate(value: string, isEnd = false): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number)
+    return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0)
+  }
+  return new Date(value)
+}
+
+const DAY_LABEL_BY_INDEX: Record<number, string> = {
+  0: 'Sun',
+  1: 'Mon',
+  2: 'Tue',
+  3: 'Wed',
+  4: 'Thu',
+  5: 'Fri',
+  6: 'Sat',
+}
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading, checkAuth } = useAuth()
@@ -67,19 +93,14 @@ export default function ProfilePage() {
   const [hourlyRate, setHourlyRate] = useState('')
   const [currency, setCurrency] = useState('USD')
   const [serviceCategories, setServiceCategories] = useState<string[]>([])
+  const [serviceCatalog, setServiceCatalog] = useState<Array<{ name: string; services: Array<{ name: string }> }>>([])
+  const [serviceCatalogLoading, setServiceCatalogLoading] = useState(false)
+  const [serviceCatalogError, setServiceCatalogError] = useState<string | null>(null)
   const [blockedRanges, setBlockedRanges] = useState<{ startDate: string, endDate: string, reason?: string }[]>([])
   const [newBlockedRange, setNewBlockedRange] = useState({ startDate: '', endDate: '', reason: '' })
 
   // Company availability (for team members to inherit)
-  const [companyAvailability, setCompanyAvailability] = useState({
-    monday: { available: true, startTime: '09:00', endTime: '17:00' },
-    tuesday: { available: true, startTime: '09:00', endTime: '17:00' },
-    wednesday: { available: true, startTime: '09:00', endTime: '17:00' },
-    thursday: { available: true, startTime: '09:00', endTime: '17:00' },
-    friday: { available: true, startTime: '09:00', endTime: '17:00' },
-    saturday: { available: false, startTime: '09:00', endTime: '17:00' },
-    sunday: { available: false, startTime: '09:00', endTime: '17:00' }
-  })
+  const [companyAvailability, setCompanyAvailability] = useState<CompanyAvailability>(DEFAULT_COMPANY_AVAILABILITY)
   const [companyBlockedRanges, setCompanyBlockedRanges] = useState<{ startDate: string, endDate: string, reason?: string, isHoliday?: boolean }[]>([])
   const [newCompanyBlockedRange, setNewCompanyBlockedRange] = useState({ startDate: '', endDate: '', reason: '', isHoliday: false })
   const [bookingEvents, setBookingEvents] = useState<CalendarEvent[]>([])
@@ -123,6 +144,7 @@ export default function ProfilePage() {
     country: '',
     postalCode: ''
   })
+  const [customerType, setCustomerType] = useState<'individual' | 'business'>('individual')
   const [customerProfileSaving, setCustomerProfileSaving] = useState(false)
 
   // ID metadata state (for professionals)
@@ -130,6 +152,7 @@ export default function ProfilePage() {
   const [idExpirationDate, setIdExpirationDate] = useState('')
   const [idInfoSaving, setIdInfoSaving] = useState(false)
   const [showIdChangeWarning, setShowIdChangeWarning] = useState(false)
+  const [showIdProofWarning, setShowIdProofWarning] = useState(false)
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -168,11 +191,16 @@ export default function ProfilePage() {
           postalCode: user.companyAddress.postalCode || ''
         })
       }
+      if (user.customerType) {
+        setCustomerType(user.customerType)
+      }
     }
 
     // Populate ID metadata for professionals
     if (user?.role === 'professional') {
-      if (user.idCountryOfIssue) setIdCountryOfIssue(user.idCountryOfIssue)
+      if (user.idCountryOfIssue) {
+        setIdCountryOfIssue(normalizeCountryCode(user.idCountryOfIssue))
+      }
       if (user.idExpirationDate) setIdExpirationDate(user.idExpirationDate.split('T')[0])
     }
 
@@ -301,6 +329,49 @@ export default function ProfilePage() {
   }, [user])
 
   useEffect(() => {
+    if (user?.role !== 'professional') {
+      setServiceCatalog([])
+      setServiceCatalogError(null)
+      setServiceCatalogLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+
+    const fetchServiceCatalog = async () => {
+      try {
+        setServiceCatalogLoading(true)
+        setServiceCatalogError(null)
+        const country = user?.businessInfo?.country || 'BE'
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/service-categories/active?country=${encodeURIComponent(country)}`,
+          { credentials: 'include', signal: controller.signal }
+        )
+        if (!response.ok) {
+          throw new Error(`Failed to fetch service categories: ${response.status}`)
+        }
+        const data = await response.json()
+        const items = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+        setServiceCatalog(items)
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return
+        console.error('Failed to load service categories:', error)
+        setServiceCatalogError('Failed to load service categories')
+      } finally {
+        if (!controller.signal.aborted) {
+          setServiceCatalogLoading(false)
+        }
+      }
+    }
+
+    fetchServiceCatalog()
+
+    return () => {
+      controller.abort()
+    }
+  }, [user?.role, user?.businessInfo?.country])
+
+  useEffect(() => {
     if (loading || !isAuthenticated || user?.role !== 'professional') {
       return
     }
@@ -357,8 +428,8 @@ export default function ProfilePage() {
           const executionEnd = parseDate(booking.scheduledExecutionEndDate)
           const bufferStart = parseDate(booking.scheduledBufferStartDate)
           const bufferEnd = parseDate(booking.scheduledBufferEndDate)
-          const customerName = typeof booking.customer === 'object'
-            ? booking.customer?.name
+          const customerName = booking.customer && typeof booking.customer === 'object'
+            ? booking.customer.name
             : undefined
 
           if (scheduledStart && executionEnd && executionEnd > scheduledStart) {
@@ -471,18 +542,32 @@ export default function ProfilePage() {
         setShowAutoPopulateDialog(true)
       }
 
-      // Auto-prefill company address for business customers
-      if (result.valid && user?.role === 'customer' && user.customerType === 'business') {
-        if (result.companyName) {
+      // Auto-prefill company info for business customers
+      if (result.valid && user?.role === 'customer' && customerType === 'business') {
+        let changed = false
+        if (result.companyName && !customerBusinessName) {
           setCustomerBusinessName(result.companyName)
+          changed = true
         }
         if (result.parsedAddress) {
-          setCustomerCompanyAddress(prev => ({
-            address: result.parsedAddress?.streetAddress || prev.address,
-            city: result.parsedAddress?.city || prev.city,
-            country: result.parsedAddress?.country || prev.country,
-            postalCode: result.parsedAddress?.postalCode || prev.postalCode
-          }))
+          const pa = result.parsedAddress
+          const wouldUpdate =
+            (!customerCompanyAddress.address && pa.streetAddress) ||
+            (!customerCompanyAddress.city && pa.city) ||
+            (!customerCompanyAddress.country && pa.country) ||
+            (!customerCompanyAddress.postalCode && pa.postalCode)
+          if (wouldUpdate) {
+            setCustomerCompanyAddress(prev => ({
+              address: prev.address || pa.streetAddress || '',
+              city: prev.city || pa.city || '',
+              country: prev.country || pa.country || '',
+              postalCode: prev.postalCode || pa.postalCode || ''
+            }))
+            changed = true
+          }
+        }
+        if (changed) {
+          toast.success('Business information prefilled from VAT validation')
         }
       }
     } catch {
@@ -863,12 +948,27 @@ export default function ProfilePage() {
   }
 
   const removeCompanyBlockedRange = async (indexToRemove: number) => {
+    const removedRange = companyBlockedRanges[indexToRemove]
     const updatedRanges = companyBlockedRanges.filter((_, index) => index !== indexToRemove)
     setCompanyBlockedRanges(updatedRanges)
 
     const success = await saveCompanyBlockedRanges(updatedRanges)
     if (success) {
-      toast.success('Company blocked period removed and saved')
+      toast.success('Company blocked period removed', {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            let restoredRanges: typeof companyBlockedRanges = []
+            setCompanyBlockedRanges(prev => {
+              const restored = [...prev]
+              restored.splice(indexToRemove, 0, removedRange)
+              restoredRanges = restored
+              return restored
+            })
+            await saveCompanyBlockedRanges(restoredRanges)
+          }
+        }
+      })
     }
   }
 
@@ -981,16 +1081,19 @@ export default function ProfilePage() {
     setCustomerProfileSaving(true)
     try {
       const token = getAuthToken()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const body: Record<string, any> = {
+      const body: Record<string, unknown> = {
         address: customerAddress.address,
         city: customerAddress.city,
         country: customerAddress.country,
         postalCode: customerAddress.postalCode,
+        customerType
       }
-      if (user?.customerType === 'business') {
+      if (customerType === 'business') {
         body.businessName = customerBusinessName
         body.companyAddress = customerCompanyAddress
+      } else {
+        body.businessName = ''
+        body.companyAddress = { address: '', city: '', country: '', postalCode: '' }
       }
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/customer-profile`, {
@@ -1053,19 +1156,12 @@ export default function ProfilePage() {
   }
 
   const hasIdInfoChanges = () => {
-    const currentCountry = user?.idCountryOfIssue || ''
+    const currentCountry = normalizeCountryCode(user?.idCountryOfIssue || '')
     const currentExpiry = user?.idExpirationDate ? user.idExpirationDate.split('T')[0] : ''
     return idCountryOfIssue !== currentCountry || idExpirationDate !== currentExpiry
   }
 
   const calendarEvents = useMemo(() => {
-    const toEventDate = (value: string, isEnd = false) => {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        const [year, month, day] = value.split('-').map(Number)
-        return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0)
-      }
-      return new Date(value)
-    }
     const personalEvents: CalendarEvent[] = blockedRanges.map((range, index) => ({
       id: `personal-${index}`,
       type: 'personal',
@@ -1086,47 +1182,19 @@ export default function ProfilePage() {
     return [...companyEvents, ...bookingEvents, ...personalEvents]
   }, [blockedRanges, companyBlockedRanges, bookingEvents])
 
-  const personalScheduleWindow = useMemo(
+  const scheduleWindow = useMemo(
     () => getScheduleWindow(companyAvailability),
     [companyAvailability]
   )
-  const personalVisibleDays = useMemo(
+  const visibleDays = useMemo(
     () => getVisibleScheduleDays(companyAvailability),
     [companyAvailability]
   )
-  const dayLabelByIndex: Record<number, string> = {
-    0: 'Sun',
-    1: 'Mon',
-    2: 'Tue',
-    3: 'Wed',
-    4: 'Thu',
-    5: 'Fri',
-    6: 'Sat',
-  }
-  const personalVisibleDaysLabel = personalVisibleDays
-    .map((dayIndex) => dayLabelByIndex[dayIndex] || '')
-    .filter(Boolean)
-    .join(', ')
-  const companyScheduleWindow = useMemo(
-    () => getScheduleWindow(companyAvailability),
-    [companyAvailability]
-  )
-  const companyVisibleDays = useMemo(
-    () => getVisibleScheduleDays(companyAvailability),
-    [companyAvailability]
-  )
-  const companyVisibleDaysLabel = companyVisibleDays
-    .map((dayIndex) => dayLabelByIndex[dayIndex] || '')
+  const visibleDaysLabel = visibleDays
+    .map((dayIndex) => DAY_LABEL_BY_INDEX[dayIndex] || '')
     .filter(Boolean)
     .join(', ')
   const companyCalendarEvents = useMemo<CalendarEvent[]>(() => {
-    const toEventDate = (value: string, isEnd = false) => {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return new Date(`${value}T${isEnd ? '23:59:59' : '00:00:00'}`)
-      }
-      return new Date(value)
-    }
-
     const events: CalendarEvent[] = []
     companyBlockedRanges.forEach((range, index) => {
       const start = toEventDate(range.startDate, false)
@@ -1164,7 +1232,7 @@ export default function ProfilePage() {
   const hasVatChanges = vatNumber !== (user?.vatNumber || '')
   const canValidate = vatNumber.trim() && vatNumber !== (user?.vatNumber || '')
 
-  const serviceOptions = [
+  const fallbackServiceOptions = [
     'Plumbing', 'Electrical', 'Carpentry', 'Painting', 'Cleaning',
     'IT Support', 'Home Repair', 'Gardening', 'Moving', 'Tutoring'
   ]
@@ -1623,19 +1691,50 @@ export default function ProfilePage() {
                   {/* Service Categories */}
                   <div className="space-y-2">
                     <Label>Service Categories</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {serviceOptions.map((service) => (
-                        <Button
-                          key={service}
-                          type="button"
-                          variant={serviceCategories.includes(service) ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handleServiceCategoryToggle(service)}
-                        >
-                          {service}
-                        </Button>
-                      ))}
-                    </div>
+                    {serviceCatalogLoading && (
+                      <div className="text-sm text-muted-foreground">Loading services...</div>
+                    )}
+                    {serviceCatalogError && (
+                      <div className="text-sm text-red-600">{serviceCatalogError}</div>
+                    )}
+                    {!serviceCatalogLoading && (
+                      serviceCatalog.length > 0 ? (
+                        <div className="space-y-4">
+                          {serviceCatalog.map((category) => (
+                            <div key={category.name} className="space-y-2">
+                              <div className="text-sm font-semibold text-slate-700">{category.name}</div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {category.services.map((service) => (
+                                  <Button
+                                    key={`${category.name}-${service.name}`}
+                                    type="button"
+                                    variant={serviceCategories.includes(service.name) ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => handleServiceCategoryToggle(service.name)}
+                                  >
+                                    {service.name}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {fallbackServiceOptions.map((service) => (
+                            <Button
+                              key={service}
+                              type="button"
+                              variant={serviceCategories.includes(service) ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handleServiceCategoryToggle(service)}
+                            >
+                              {service}
+                            </Button>
+                          ))}
+                        </div>
+                      )
+                    )}
                   </div>
 
                   <Button
@@ -1714,7 +1813,13 @@ export default function ProfilePage() {
                   )}
 
                   <Button
-                    onClick={handleIdProofUpload}
+                    onClick={() => {
+                      if (user?.professionalStatus === 'approved') {
+                        setShowIdProofWarning(true)
+                      } else {
+                        handleIdProofUpload()
+                      }
+                    }}
                     disabled={!idProofFile || uploading}
                     className="w-full"
                   >
@@ -1737,12 +1842,18 @@ export default function ProfilePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="idCountryOfIssue">Country of Issue</Label>
-                        <Input
-                          id="idCountryOfIssue"
-                          value={idCountryOfIssue}
-                          onChange={(e) => setIdCountryOfIssue(e.target.value)}
-                          placeholder="e.g., Belgium, Germany"
-                        />
+                        <Select value={idCountryOfIssue} onValueChange={setIdCountryOfIssue}>
+                          <SelectTrigger id="idCountryOfIssue">
+                            <SelectValue placeholder="Select country" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EU_COUNTRIES.map((country) => (
+                              <SelectItem key={country.code} value={country.code}>
+                                {country.flag} {country.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="idExpirationDate">Expiration Date</Label>
@@ -1891,9 +2002,9 @@ export default function ProfilePage() {
                     title="Weekly Availability"
                     description="Booking details are shown inside each block. Click personal blocks to edit."
                     events={calendarEvents}
-                    dayStart={personalScheduleWindow.dayStart}
-                    dayEnd={personalScheduleWindow.dayEnd}
-                    visibleDays={personalVisibleDays}
+                    dayStart={scheduleWindow.dayStart}
+                    dayEnd={scheduleWindow.dayEnd}
+                    visibleDays={visibleDays}
                     onEventClick={(event) => {
                       if (event.type === 'personal' && typeof event.meta?.rangeIndex === 'number') {
                         openEditRange(event.meta.rangeIndex)
@@ -1916,7 +2027,7 @@ export default function ProfilePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                    Calendar window: {personalVisibleDaysLabel || 'Mon-Fri'} - {personalScheduleWindow.dayStart} to {personalScheduleWindow.dayEnd}
+                    Calendar window: {visibleDaysLabel || 'Mon-Fri'} - {scheduleWindow.dayStart} to {scheduleWindow.dayEnd}
                   </div>
                 </CardContent>
               </Card>
@@ -1929,7 +2040,7 @@ export default function ProfilePage() {
                 <p className="text-sm text-muted-foreground">Set company-wide schedule that team members can inherit</p>
               </div>
 
-              {/* Company Closures */}
+              {/* Company Closures Card */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1937,17 +2048,14 @@ export default function ProfilePage() {
                     Company Closures
                   </CardTitle>
                   <CardDescription>
-                    Add blocked periods with start and end times. These slots appear directly in the weekly calendar.
+                    Block company-wide closure periods. These appear on the calendar below.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-3">
-                    <Label className="text-base font-medium">Add Blocked Period</Label>
-                  </div>
+                <CardContent className="space-y-4">
                   <div className="space-y-4">
                     <div className="grid md:grid-cols-12 gap-4">
                       <div className="md:col-span-3">
-                        <Label htmlFor="company-range-start">Start Date</Label>
+                        <Label htmlFor="company-range-start">Start</Label>
                         <Input
                           id="company-range-start"
                           type="datetime-local"
@@ -1957,15 +2065,13 @@ export default function ProfilePage() {
                         />
                       </div>
                       <div className="md:col-span-3">
-                        <Label htmlFor="company-range-end">End Date</Label>
+                        <Label htmlFor="company-range-end">End</Label>
                         <Input
                           id="company-range-end"
                           type="datetime-local"
                           value={newCompanyBlockedRange.endDate}
                           onChange={(e) => setNewCompanyBlockedRange(prev => ({ ...prev, endDate: e.target.value }))}
-                          min={newCompanyBlockedRange.startDate
-                            ? newCompanyBlockedRange.startDate
-                            : toLocalInputValue(new Date().toISOString())}
+                          min={newCompanyBlockedRange.startDate || toLocalInputValue(new Date().toISOString())}
                         />
                       </div>
                       <div className="md:col-span-4">
@@ -1992,12 +2098,10 @@ export default function ProfilePage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         id="company-range-is-holiday"
                         checked={newCompanyBlockedRange.isHoliday}
-                        onChange={(e) => setNewCompanyBlockedRange(prev => ({ ...prev, isHoliday: e.target.checked }))}
-                        className="rounded"
+                        onCheckedChange={(value) => setNewCompanyBlockedRange(prev => ({ ...prev, isHoliday: Boolean(value) }))}
                       />
                       <Label htmlFor="company-range-is-holiday" className="text-sm font-normal cursor-pointer">
                         Mark as official company holiday
@@ -2006,18 +2110,15 @@ export default function ProfilePage() {
                   </div>
 
                   <WeeklyAvailabilityCalendar
-                    title="Company Weekly Calendar"
-                    description="Blocked periods are shown as timeslots. Click a company slot to remove it."
+                    title="Company Closures Calendar"
+                    description="Click a closure block to remove it."
                     events={companyCalendarEvents}
-                    dayStart={companyScheduleWindow.dayStart}
-                    dayEnd={companyScheduleWindow.dayEnd}
-                    visibleDays={companyVisibleDays}
+                    dayStart={scheduleWindow.dayStart}
+                    dayEnd={scheduleWindow.dayEnd}
+                    visibleDays={visibleDays}
                     onEventClick={(event) => {
                       if (event.type === 'company' && typeof event.meta?.rangeIndex === 'number') {
-                        const shouldRemove = window.confirm('Remove this company blocked period?')
-                        if (shouldRemove) {
-                          void removeCompanyBlockedRange(event.meta.rangeIndex)
-                        }
+                        removeCompanyBlockedRange(event.meta.rangeIndex)
                       }
                     }}
                   />
@@ -2040,18 +2141,17 @@ export default function ProfilePage() {
                     <div key={day} className="flex items-center gap-4 p-3 border rounded-lg">
                       <div className="w-20 text-sm font-medium capitalize">{day}</div>
                       <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          id={`company-day-${day}`}
                           checked={schedule.available}
-                          onChange={(e) => {
+                          onCheckedChange={(value) => {
                             setCompanyAvailability(prev => ({
                               ...prev,
-                              [day]: { ...prev[day as keyof typeof prev], available: e.target.checked }
+                              [day]: { ...prev[day as keyof typeof prev], available: Boolean(value) }
                             }))
                           }}
-                          className="rounded"
                         />
-                        <span className="text-sm">Available</span>
+                        <Label htmlFor={`company-day-${day}`} className="text-sm font-normal cursor-pointer">Available</Label>
                       </div>
                       {schedule.available && (
                         <>
@@ -2084,7 +2184,7 @@ export default function ProfilePage() {
                   ))}
 
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                    Calendar window: {companyVisibleDaysLabel || 'Mon-Fri'} - {companyScheduleWindow.dayStart} to {companyScheduleWindow.dayEnd}
+                    Calendar window: {visibleDaysLabel || 'Mon-Fri'} - {scheduleWindow.dayStart} to {scheduleWindow.dayEnd}
                   </div>
 
                   <Button
@@ -2103,6 +2203,8 @@ export default function ProfilePage() {
                   </Button>
                 </CardContent>
               </Card>
+
+
             </TabsContent >
 
             {/* Employees Tab */}
@@ -2214,11 +2316,41 @@ export default function ProfilePage() {
                         Address Information
                       </CardTitle>
                       <CardDescription>
-                        Your address details
-                        {user.customerType === 'business' && ' and business information'}
+                        Your personal address details
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* Customer Type Toggle */}
+                      <div className="flex flex-col space-y-2 mb-4">
+                        <Label>Account Type</Label>
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="radio"
+                              id="type-individual"
+                              name="customerType"
+                              value="individual"
+                              checked={customerType === 'individual'}
+                              onChange={() => setCustomerType('individual')}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="type-individual" className="font-normal cursor-pointer">Individual</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="radio"
+                              id="type-business"
+                              name="customerType"
+                              value="business"
+                              checked={customerType === 'business'}
+                              onChange={() => setCustomerType('business')}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="type-business" className="font-normal cursor-pointer">Business</Label>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="customer-address">Address</Label>
@@ -2258,22 +2390,7 @@ export default function ProfilePage() {
                         </div>
                       </div>
 
-                      {user.customerType === 'business' && (
-                        <>
-                          <div className="border-t pt-4 mt-4">
-                            <h4 className="text-sm font-medium mb-3">Business Information</h4>
-                            <div className="space-y-2">
-                              <Label htmlFor="customer-businessName">Business Name</Label>
-                              <Input
-                                id="customer-businessName"
-                                value={customerBusinessName}
-                                onChange={(e) => setCustomerBusinessName(e.target.value)}
-                                placeholder="Your business name"
-                              />
-                            </div>
-                          </div>
-                        </>
-                      )}
+
 
                       <Button
                         onClick={handleCustomerProfileUpdate}
@@ -2296,18 +2413,19 @@ export default function ProfilePage() {
 
               {/* VAT for business customers */}
               {
-                user?.role === 'customer' && user.customerType === 'business' && (
+                user?.role === 'customer' && customerType === 'business' && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Building className="h-5 w-5" />
-                        VAT Information
+                        VAT &amp; Business Information
                       </CardTitle>
                       <CardDescription>
-                        Add your VAT number for EU tax compliance and invoicing.
+                        Add your VAT number for EU tax compliance and invoicing. Business name and company address will be prefilled after VAT validation.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* VAT Number Section */}
                       <div className="space-y-2">
                         <Label htmlFor="customer-vatNumber">VAT Number</Label>
                         <div className="flex gap-2">
@@ -2336,6 +2454,7 @@ export default function ProfilePage() {
                         </div>
                       </div>
 
+                      {/* Validation Results */}
                       {vatValidation.valid !== undefined && (
                         <div className={`p-3 rounded-lg border ${vatValidation.valid
                           ? 'bg-green-50 border-green-200'
@@ -2358,49 +2477,7 @@ export default function ProfilePage() {
                         </div>
                       )}
 
-                      {/* Company Address */}
-                      <div className="border-t pt-4 mt-4">
-                        <h4 className="text-sm font-medium mb-3">Company Address</h4>
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="company-address">Address</Label>
-                            <Input
-                              id="company-address"
-                              value={customerCompanyAddress.address}
-                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, address: e.target.value }))}
-                              placeholder="Company street address"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="company-city">City</Label>
-                            <Input
-                              id="company-city"
-                              value={customerCompanyAddress.city}
-                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, city: e.target.value }))}
-                              placeholder="City"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="company-country">Country</Label>
-                            <Input
-                              id="company-country"
-                              value={customerCompanyAddress.country}
-                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, country: e.target.value }))}
-                              placeholder="Country"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="company-postalCode">Postal Code</Label>
-                            <Input
-                              id="company-postalCode"
-                              value={customerCompanyAddress.postalCode}
-                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, postalCode: e.target.value }))}
-                              placeholder="Postal Code"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
+                      {/* VAT Save/Remove buttons */}
                       <div className="flex gap-2">
                         <Button
                           onClick={saveVatNumber}
@@ -2421,6 +2498,73 @@ export default function ProfilePage() {
                             Remove
                           </Button>
                         )}
+                      </div>
+
+                      {/* Business Name & Company Address Section */}
+                      <div className="border-t pt-4 mt-2 space-y-4">
+                        <h4 className="text-sm font-medium">Business Name &amp; Company Address</h4>
+                        <p className="text-xs text-muted-foreground">These fields are automatically prefilled when you validate your VAT number.</p>
+                        <div className="space-y-2">
+                          <Label htmlFor="customer-businessName">Business Name</Label>
+                          <Input
+                            id="customer-businessName"
+                            value={customerBusinessName}
+                            onChange={(e) => setCustomerBusinessName(e.target.value)}
+                            placeholder="Your business name"
+                          />
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="company-address">Company Address</Label>
+                            <Input
+                              id="company-address"
+                              value={customerCompanyAddress.address}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, address: e.target.value }))}
+                              placeholder="Company street address"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="company-city">Company City</Label>
+                            <Input
+                              id="company-city"
+                              value={customerCompanyAddress.city}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, city: e.target.value }))}
+                              placeholder="City"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="company-country">Company Country</Label>
+                            <Input
+                              id="company-country"
+                              value={customerCompanyAddress.country}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, country: e.target.value }))}
+                              placeholder="Country"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="company-postalCode">Company Postal Code</Label>
+                            <Input
+                              id="company-postalCode"
+                              value={customerCompanyAddress.postalCode}
+                              onChange={(e) => setCustomerCompanyAddress(prev => ({ ...prev, postalCode: e.target.value }))}
+                              placeholder="Postal Code"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          onClick={handleCustomerProfileUpdate}
+                          disabled={customerProfileSaving}
+                          className="w-full"
+                        >
+                          {customerProfileSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Saving...
+                            </>
+                          ) : (
+                            'Save Business Info'
+                          )}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -2611,7 +2755,7 @@ export default function ProfilePage() {
             <div className="space-y-3">
               <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm">
                 <p className="font-medium text-amber-800 mb-1">Changes to be submitted:</p>
-                {idCountryOfIssue !== (user?.idCountryOfIssue || '') && (
+                {idCountryOfIssue !== normalizeCountryCode(user?.idCountryOfIssue || '') && (
                   <p className="text-amber-700">
                     Country of Issue: {user?.idCountryOfIssue || '(empty)'} → {idCountryOfIssue || '(empty)'}
                   </p>
@@ -2646,6 +2790,46 @@ export default function ProfilePage() {
                   Cancel
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showIdProofWarning} onOpenChange={setShowIdProofWarning}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-700">
+                <AlertTriangle className="h-5 w-5" />
+                Re-verification Required
+              </DialogTitle>
+              <DialogDescription>
+                Uploading a new ID document will require admin re-verification. Your professional status will be set to <strong>pending</strong> and you will not be able to receive new bookings until an admin re-approves your profile.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-2 justify-end mt-4">
+              <Button
+                onClick={() => setShowIdProofWarning(false)}
+                variant="outline"
+                disabled={uploading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowIdProofWarning(false)
+                  handleIdProofUpload()
+                }}
+                disabled={uploading}
+                className="bg-amber-600 hover:bg-amber-700"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Uploading...
+                  </>
+                ) : (
+                  'Confirm Upload'
+                )}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

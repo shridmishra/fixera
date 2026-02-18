@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, User, Mail, Phone, Lock, Shield } from "lucide-react"
+import { ArrowLeft, User, Mail, Phone, Lock, Briefcase } from "lucide-react"
 import { toast } from "sonner"
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -32,7 +32,7 @@ export default function RegisterPage() {
     phone: '',
     countryCode: '+32',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   })
   const [loading, setLoading] = useState(false)
   const { signup } = useAuth()
@@ -93,7 +93,7 @@ export default function RegisterPage() {
   }
   const handleVerificationSuccess = () => {
     toast.success('Account verified successfully!')
-    router.push('/profile?welcome=true')
+    router.push('/professional/onboarding?welcome=true')
   }
 
   const handleInputChange = (field: keyof FormData, value: string) => {
@@ -131,13 +131,13 @@ export default function RegisterPage() {
         <Card className="shadow-xl border-0">
           <CardHeader className="text-center pb-6">
             <div className="flex items-center justify-center mb-4">
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Shield className="h-8 w-8 text-blue-600" />
+              <div className="p-3 bg-purple-100 rounded-full">
+                <Briefcase className="h-8 w-8 text-purple-600" />
               </div>
             </div>
             <CardTitle className="text-2xl font-bold text-gray-900">Create Your Account</CardTitle>
             <CardDescription className="text-gray-600">
-              Join thousands of satisfied customers and professionals on Fixera
+              Join Fixera as a professional and grow your business
             </CardDescription>
           </CardHeader>
 
@@ -245,7 +245,6 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Professional Info */}
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700 font-medium">Welcome, Professional!</p>
                 <p className="text-xs text-blue-600 mt-1">
