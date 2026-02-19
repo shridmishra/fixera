@@ -13,7 +13,7 @@ import PasswordChange from "@/components/PasswordChange"
 import EmployeeAvailability from "@/components/EmployeeAvailability"
 import WeeklyAvailabilityCalendar, { CalendarEvent } from "@/components/calendar/WeeklyAvailabilityCalendar"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -56,6 +56,20 @@ const DAY_LABEL_BY_INDEX: Record<number, string> = {
   4: 'Thu',
   5: 'Fri',
   6: 'Sat',
+}
+
+interface StripeAccountStatus {
+  hasAccount: boolean
+  onboardingCompleted?: boolean
+  chargesEnabled?: boolean
+  payoutsEnabled?: boolean
+  payouts_enabled?: boolean
+  detailsSubmitted?: boolean
+  accountStatus?: string
+  requirements?: {
+    currentlyDue?: string[]
+    pendingVerification?: string[]
+  }
 }
 
 export default function ProfilePage() {
@@ -153,6 +167,57 @@ export default function ProfilePage() {
   const [idInfoSaving, setIdInfoSaving] = useState(false)
   const [showIdChangeWarning, setShowIdChangeWarning] = useState(false)
   const [showIdProofWarning, setShowIdProofWarning] = useState(false)
+  const [stripeAccountStatus, setStripeAccountStatus] = useState<StripeAccountStatus | null>(null)
+  const [stripeStatusLoading, setStripeStatusLoading] = useState(false)
+  const [stripeStatusError, setStripeStatusError] = useState('')
+
+  const loadStripeAccountStatus = useCallback(async () => {
+    if (user?.role !== 'professional') {
+      return
+    }
+
+    setStripeStatusLoading(true)
+    setStripeStatusError('')
+
+    try {
+      const token = getAuthToken()
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers.Authorization = `Bearer ${token}`
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/stripe/connect/account-status`,
+        {
+          credentials: 'include',
+          headers,
+        }
+      )
+
+      if (response.status === 404) {
+        setStripeAccountStatus({ hasAccount: false })
+        return
+      }
+
+      const data = await response.json()
+
+      if (response.ok && data?.success && data?.data) {
+        const payoutsEnabled = Boolean(data.data.payoutsEnabled ?? data.data.payouts_enabled)
+        setStripeAccountStatus({
+          hasAccount: true,
+          ...data.data,
+          payoutsEnabled,
+        })
+        return
+      }
+
+      setStripeStatusError(data?.error?.message || data?.msg || 'Failed to load Stripe account status')
+    } catch (error) {
+      setStripeStatusError(error instanceof Error ? error.message : 'Failed to load Stripe account status')
+    } finally {
+      setStripeStatusLoading(false)
+    }
+  }, [user?.role])
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -487,6 +552,17 @@ export default function ProfilePage() {
       abortController.abort()
     }
   }, [loading, isAuthenticated, user?.role])
+
+  useEffect(() => {
+    if (loading || !isAuthenticated || user?.role !== 'professional') {
+      setStripeAccountStatus(null)
+      setStripeStatusError('')
+      setStripeStatusLoading(false)
+      return
+    }
+
+    void loadStripeAccountStatus()
+  }, [loading, isAuthenticated, user?.role, loadStripeAccountStatus])
 
   const handleVatNumberChange = (value: string) => {
     setVatNumber(value)
@@ -1238,6 +1314,13 @@ export default function ProfilePage() {
   ]
 
   const isProfessional = user?.role === 'professional'
+  const stripePayoutsEnabled = Boolean(stripeAccountStatus?.payoutsEnabled ?? stripeAccountStatus?.payouts_enabled)
+  const isStripeFullyReady = Boolean(
+    stripeAccountStatus?.hasAccount &&
+    stripeAccountStatus?.onboardingCompleted &&
+    stripeAccountStatus?.chargesEnabled &&
+    stripePayoutsEnabled
+  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -1916,16 +1999,92 @@ export default function ProfilePage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Set up your Stripe account to start accepting payments. You&apos;ll be guided through Stripe&apos;s secure onboarding process.
-                  </p>
-                  <Button
-                    onClick={() => router.push('/professional/stripe/setup')}
-                    className="w-full sm:w-auto"
-                  >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Go to Stripe Setup
-                  </Button>
+                  {stripeStatusLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Checking Stripe account status...
+                    </div>
+                  ) : stripeAccountStatus?.hasAccount ? (
+                    <div className="space-y-4">
+                      <div className={`rounded-lg border p-3 ${isStripeFullyReady ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                        <p className={`text-sm font-medium ${isStripeFullyReady ? 'text-green-800' : 'text-amber-800'}`}>
+                          {isStripeFullyReady ? 'Stripe account connected and payout-ready.' : 'Stripe account connected, but setup is not fully complete.'}
+                        </p>
+                      </div>
+
+                      <div className="grid sm:grid-cols-3 gap-3 text-sm">
+                        <div className="rounded-md border p-3">
+                          <p className="text-muted-foreground mb-1">Onboarding</p>
+                          <p className="font-medium flex items-center gap-1">
+                            {stripeAccountStatus.onboardingCompleted ? <Check className="h-4 w-4 text-green-600" /> : <X className="h-4 w-4 text-red-600" />}
+                            {stripeAccountStatus.onboardingCompleted ? 'Complete' : 'Incomplete'}
+                          </p>
+                        </div>
+                        <div className="rounded-md border p-3">
+                          <p className="text-muted-foreground mb-1">Charges</p>
+                          <p className="font-medium flex items-center gap-1">
+                            {stripeAccountStatus.chargesEnabled ? <Check className="h-4 w-4 text-green-600" /> : <X className="h-4 w-4 text-red-600" />}
+                            {stripeAccountStatus.chargesEnabled ? 'Enabled' : 'Disabled'}
+                          </p>
+                        </div>
+                        <div className="rounded-md border p-3">
+                          <p className="text-muted-foreground mb-1">Payouts</p>
+                          <p className="font-medium flex items-center gap-1">
+                            {stripePayoutsEnabled ? <Check className="h-4 w-4 text-green-600" /> : <X className="h-4 w-4 text-red-600" />}
+                            {stripePayoutsEnabled ? 'Enabled' : 'Disabled'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {stripeStatusError && (
+                        <p className="text-sm text-red-600">{stripeStatusError}</p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          onClick={() => router.push('/professional/stripe/setup')}
+                          className="w-full sm:w-auto"
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          {isStripeFullyReady ? 'Manage Stripe Account' : 'Complete Stripe Setup'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void loadStripeAccountStatus()}
+                          disabled={stripeStatusLoading}
+                        >
+                          Refresh Status
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Set up your Stripe account to start accepting payments. You&apos;ll be guided through Stripe&apos;s secure onboarding process.
+                      </p>
+                      {stripeStatusError && (
+                        <p className="text-sm text-red-600">{stripeStatusError}</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          onClick={() => router.push('/professional/stripe/setup')}
+                          className="w-full sm:w-auto"
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Go to Stripe Setup
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void loadStripeAccountStatus()}
+                          disabled={stripeStatusLoading}
+                        >
+                          Refresh Status
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
