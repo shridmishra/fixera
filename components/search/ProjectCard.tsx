@@ -19,7 +19,7 @@ interface ProjectCardProps {
       service?: string;
       areaOfWork?: string;
     }>;
-    timeMode?: 'hours' | 'days';
+    timeMode?: 'hours' | 'days' | 'mixed';
     executionDuration?: {
       value: number;
       unit: 'hours' | 'days';
@@ -218,7 +218,9 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <div className="text-6xl text-gray-300">🏗️</div>
+            <div className="text-sm text-gray-500" aria-label="No preview available">
+              No preview available
+            </div>
           </div>
         )}
 

@@ -107,7 +107,7 @@ interface ProjectData {
   _id?: string
   id?: string
   status?: 'draft' | 'pending_approval' | 'published' | 'rejected' | 'booked' | 'on_hold' | 'completed' | 'cancelled'
-  timeMode?: 'hours' | 'days'
+  timeMode?: 'hours' | 'days' | 'mixed'
   category?: string
   service?: string
   areaOfWork?: string
@@ -229,7 +229,7 @@ export default function ProjectCreatePage() {
       const loadProject = async () => {
         setIsLoading(true)
         try {
-          console.log('🔄 Loading project:', projectId)
+          console.log('[loading] Loading project:', projectId)
           const token = getAuthToken()
           const headers: Record<string, string> = {
             'Content-Type': 'application/json'
@@ -242,11 +242,11 @@ export default function ProjectCreatePage() {
             headers
           })
 
-          console.log('📡 Project fetch response:', response.status, response.statusText)
+          console.log('[loading] Project fetch response:', response.status, response.statusText)
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}))
-            console.error('❌ Failed to load project:', {
+            console.error('? Failed to load project:', {
               status: response.status,
               statusText: response.statusText,
               error: errorData
@@ -270,8 +270,8 @@ export default function ProjectCreatePage() {
           }
 
           const project = await response.json()
-          console.log('✅ Loaded project data:', project)
-          console.log('📊 Project status:', project.status)
+          console.log('? Loaded project data:', project)
+          console.log('[ok] Project status:', project.status)
 
           setProjectData({
             id: project._id,
