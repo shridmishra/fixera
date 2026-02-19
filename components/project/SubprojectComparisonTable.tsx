@@ -31,14 +31,28 @@ interface Subproject {
   }
 }
 
+interface DateLabels {
+  firstAvailable?: string | null
+  shortestThroughput?: string | null
+}
+
 interface SubprojectComparisonTableProps {
   subprojects: Subproject[]
   onSelectPackage: (index: number) => void
   priceModel?: string
+  selectedIndex: number
+  onSelectIndex: (index: number) => void
+  dateLabels?: DateLabels
 }
 
-export default function SubprojectComparisonTable({ subprojects, onSelectPackage, priceModel }: SubprojectComparisonTableProps) {
-  const [selectedTab, setSelectedTab] = useState(0)
+export default function SubprojectComparisonTable({
+  subprojects,
+  onSelectPackage,
+  priceModel,
+  selectedIndex,
+  onSelectIndex,
+  dateLabels
+}: SubprojectComparisonTableProps) {
 
   if (!subprojects || subprojects.length === 0) {
     return null
@@ -54,7 +68,7 @@ export default function SubprojectComparisonTable({ subprojects, onSelectPackage
     return `${warranty.value} ${warranty.unit}`
   }
 
-  const currentSubproject = subprojects[selectedTab]
+  const currentSubproject = subprojects[selectedIndex]
 
   return (
     <div className="w-full">
@@ -66,12 +80,11 @@ export default function SubprojectComparisonTable({ subprojects, onSelectPackage
               {subprojects.map((subproject, index) => (
                 <button
                   key={index}
-                  onClick={() => setSelectedTab(index)}
-                  className={`flex-1 px-6 py-4 text-center font-semibold text-base transition-all relative ${
-                    selectedTab === index
-                      ? 'text-gray-900 border-b-2 border-gray-900'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                  onClick={() => onSelectIndex(index)}
+                  className={`flex-1 px-6 py-4 text-center font-semibold text-base transition-all relative ${selectedIndex === index
+                    ? 'text-gray-900 border-b-2 border-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                    }`}
                 >
                   {subproject.name}
                   {index === 1 && subprojects.length === 3 && (
@@ -136,6 +149,24 @@ export default function SubprojectComparisonTable({ subprojects, onSelectPackage
                   </div>
                 )}
               </div>
+
+              {/* Date Availability */}
+              {(dateLabels?.firstAvailable || dateLabels?.shortestThroughput) && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3 border border-gray-100">
+                  {dateLabels.firstAvailable && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">First Available</span>
+                      <span className="font-medium text-gray-900">{dateLabels.firstAvailable}</span>
+                    </div>
+                  )}
+                  {dateLabels.shortestThroughput && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Shortest Throughput</span>
+                      <span className="font-medium text-gray-900">{dateLabels.shortestThroughput}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* What's Included */}
@@ -158,7 +189,7 @@ export default function SubprojectComparisonTable({ subprojects, onSelectPackage
 
             {/* Continue Button */}
             <Button
-              onClick={() => onSelectPackage(selectedTab)}
+              onClick={() => onSelectPackage(selectedIndex)}
               className="w-full bg-black hover:bg-gray-900 text-white h-12 text-base font-semibold group"
             >
               Continue
