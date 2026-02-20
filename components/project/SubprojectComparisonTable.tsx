@@ -71,25 +71,26 @@ export default function SubprojectComparisonTable({
   const currentSubproject = subprojects[selectedIndex]
 
   // Collect all unique included items across all subprojects, preserving their order of appearance
-  const allIncludedItems = Array.from(
-    new Map(
-      subprojects
-        .flatMap((sp) => {
-          if (!Array.isArray(sp.included)) return [];
-          return sp.included;
-        })
-        .filter((item) => {
-          if (!item) return false;
-          if (typeof item === 'string') return (item as string).trim() !== '';
-          return Boolean(item.name && item.name.trim() !== '');
-        })
-        .map((item) => {
-          const name = typeof item === 'string' ? item : item.name;
-          const description = typeof item === 'string' ? undefined : item.description;
-          return [name, { name, description }];
-        })
-    ).values()
-  )
+  const includedItemsMap = new Map<string, { name: string; description?: string }>();
+  subprojects.forEach((sp) => {
+    if (!Array.isArray(sp.included)) return;
+    sp.included.forEach((item) => {
+      if (!item) return;
+      const name = typeof item === 'string' ? (item as string).trim() : item.name?.trim();
+      if (!name) return;
+
+      const description = typeof item === 'string' ? undefined : item.description;
+      const existing = includedItemsMap.get(name);
+
+      if (!existing) {
+        includedItemsMap.set(name, { name, description });
+      } else if (!existing.description && description) {
+        includedItemsMap.set(name, { name, description });
+      }
+    });
+  });
+
+  const allIncludedItems = Array.from(includedItemsMap.values());
 
   return (
     <div className="w-full">
@@ -198,7 +199,8 @@ export default function SubprojectComparisonTable({
                   {allIncludedItems.map((item, itemIdx) => {
                     const isIncluded = (currentSubproject.included || []).some(
                       (currItem) => {
-                        const currName = typeof currItem === 'string' ? currItem : currItem.name;
+                        if (!currItem) return false;
+                        const currName = typeof currItem === 'string' ? (currItem as string).trim() : currItem.name?.trim();
                         return currName === item.name;
                       }
                     )
