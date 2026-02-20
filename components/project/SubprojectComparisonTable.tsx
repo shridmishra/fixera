@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Check, Clock, Shield, ArrowRight, Calendar } from 'lucide-react'
@@ -43,6 +43,20 @@ interface SubprojectComparisonTableProps {
   selectedIndex: number
   onSelectIndex: (index: number) => void
   dateLabels?: DateLabels
+  timeMode?: 'hours' | 'days' | 'mixed'
+  companyAvailability?: {
+    [key in 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday']?: {
+      available: boolean;
+      startTime?: string;
+      endTime?: string;
+    };
+  }
+  companyBlockedRanges?: Array<{
+    startDate: string;
+    endDate: string;
+    reason?: string;
+    isHoliday?: boolean;
+  }>
 }
 
 export default function SubprojectComparisonTable({
@@ -51,12 +65,12 @@ export default function SubprojectComparisonTable({
   priceModel,
   selectedIndex,
   onSelectIndex,
-  dateLabels
+  dateLabels,
+  timeMode,
+  companyAvailability,
+  companyBlockedRanges
 }: SubprojectComparisonTableProps) {
 
-  if (!subprojects || subprojects.length === 0) {
-    return null
-  }
 
   const formatDuration = (duration?: { value: number; unit: 'hours' | 'days' }): string => {
     if (!duration) return 'N/A'
@@ -104,7 +118,11 @@ export default function SubprojectComparisonTable({
       }
     });
     return names;
-  }, [currentSubproject.included]);
+  }, [currentSubproject?.included]);
+
+  if (!subprojects || subprojects.length === 0 || !currentSubproject) {
+    return null;
+  }
 
   return (
     <div className="w-full">
@@ -187,32 +205,19 @@ export default function SubprojectComparisonTable({
                   )}
                 </div>
 
-                {/* Date Availability (Clean & Simplistic) */}
-                {dateLabels?.firstAvailable && (
-                  <div className="flex items-center text-sm text-gray-600 mt-1">
-                    <Calendar className="w-4 h-4 mr-2 text-gray-500" />
-                    <span>First Available: <span className="font-medium text-gray-900">{dateLabels.firstAvailable}</span></span>
-                  </div>
-                )}
-                {dateLabels?.shortestThroughput && (
-                  <div className="flex items-center text-sm text-gray-600 mt-1">
-                    <Calendar className="w-4 h-4 mr-2 text-gray-500" />
-                    <span>Shortest Throughput: <span className="font-medium text-gray-900">{dateLabels.shortestThroughput}</span></span>
-                  </div>
-                )}
               </div>
             </div>
 
             {/* What's Included */}
             {allIncludedItems.length > 0 && (
-              <div className="mb-8">
+              <div className="mb-8 border-t border-gray-100 pt-6">
                 <h4 className="font-semibold text-base text-gray-900 mb-4">What&apos;s Included:</h4>
                 <div className="space-y-3">
                   {allIncludedItems.map((item, itemIdx) => {
                     const isIncluded = currentIncludedNames.has(item.name);
                     return (
                       <div key={itemIdx} className="flex items-start space-x-3">
-                        <Check className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isIncluded ? 'text-gray-900' : 'text-gray-300'}`} />
+                        <Check className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isIncluded ? 'text-green-500' : 'text-gray-300'}`} />
                         <div>
                           <p className={`text-sm font-medium ${isIncluded ? 'text-gray-900' : 'text-gray-400'}`}>{item.name}</p>
                           {item.description && (
@@ -226,6 +231,22 @@ export default function SubprojectComparisonTable({
               </div>
             )}
 
+            {/* Date Availability (Clean & Simplistic) */}
+            <div className="mb-6 space-y-2">
+              {dateLabels?.firstAvailable && (
+                <div className="flex items-center text-sm text-gray-600">
+                  <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+                  <span>First Available: <span className="font-medium text-gray-900">{dateLabels.firstAvailable}</span></span>
+                </div>
+              )}
+              {timeMode !== 'hours' && dateLabels?.shortestThroughput && (
+                <div className="flex items-center text-sm text-gray-600">
+                  <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+                  <span>Shortest Throughput: <span className="font-medium text-gray-900">{dateLabels.shortestThroughput}</span></span>
+                </div>
+              )}
+            </div>
+
             {/* Continue Button */}
             <Button
               onClick={() => onSelectPackage(selectedIndex)}
@@ -238,7 +259,7 @@ export default function SubprojectComparisonTable({
             {/* Contact Me Button */}
             <Button
               variant="outline"
-              className="w-full mt-3 h-12 text-base font-medium border-gray-300 hover:bg-gray-50"
+              className="w-full mt-3 mb-8 h-12 text-base font-medium border-gray-300 hover:bg-gray-50"
             >
               Contact me
             </Button>
