@@ -206,6 +206,7 @@ export default function ProjectDetailPage() {
   const [proposals, setProposals] = useState<
     ScheduleProposalsResponse['proposals'] | null
   >(null);
+  const [viewedSubprojectIndex, setViewedSubprojectIndex] = useState(0);
   const [viewerTimeZone, setViewerTimeZone] = useState('UTC');
 
   const projectId = params.id as string;
@@ -217,6 +218,7 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     setCurrentImageIndex(0);
     setSelectedSubprojectIndex(null);
+    setViewedSubprojectIndex(0);
   }, [project?._id]);
 
   useEffect(() => {
@@ -226,21 +228,12 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (!projectId || !project) return;
 
-    // Determine which subproject index to use
-    // If no main execution duration but has subprojects, default to index 0
-    const hasMainDuration = project.executionDuration?.value;
-    const effectiveIndex = typeof selectedSubprojectIndex === 'number'
-      ? selectedSubprojectIndex
-      : (!hasMainDuration && project.subprojects?.length)
-        ? 0
-        : undefined;
-
-    fetchScheduleProposals(effectiveIndex);
+    // Fetch proposals for the currently viewed subproject
+    fetchScheduleProposals(viewedSubprojectIndex);
   }, [
     projectId,
-    selectedSubprojectIndex,
+    viewedSubprojectIndex,
     project?.executionDuration?.value,
-    project?.subprojects?.length,
   ]);
 
   const fetchProject = async () => {
@@ -355,6 +348,43 @@ export default function ProjectDetailPage() {
   const warrantySummaries = collectWarrantySummaries(project.subprojects);
   const hasQualityHighlights =
     qualityCertificates.length > 0 || warrantySummaries.length > 0;
+
+  const getComparisonTableDateLabels = () => {
+    // Simplistic formatting: "MMM d, yyyy" (e.g. Feb 25, 2026) or "MMM d, yyyy HH:mm"
+    // We strictly use viewerTimeZone
+
+    // First Available
+    let firstAvailable = null;
+    if (firstAvailableWindow) {
+      // It's a window (start/end)
+      const label = includeTime
+        ? formatWindowProfessionalViewer(firstAvailableWindow, professionalTimeZone, viewerTimeZone, true)?.viewerLabel
+        : formatWindowProfessionalViewer(firstAvailableWindow, professionalTimeZone, viewerTimeZone, false)?.viewerLabel;
+
+      firstAvailable = label;
+    } else if (derivedFirstAvailableDate) {
+      // Just a start date
+      const label = includeTime
+        ? formatProfessionalViewerLabel(derivedFirstAvailableDate, professionalTimeZone, viewerTimeZone)?.viewerLabel
+        : formatDateOnlyProfessionalViewer(derivedFirstAvailableDate, professionalTimeZone, viewerTimeZone)?.viewerLabel;
+      firstAvailable = label;
+    }
+
+    // Shortest Throughput
+    let shortestThroughput = null;
+    if (!includeTime && proposals?.shortestThroughputProposal) {
+      shortestThroughput = formatWindowProfessionalViewer(
+        proposals.shortestThroughputProposal,
+        professionalTimeZone,
+        viewerTimeZone,
+        false
+      )?.viewerLabel;
+    }
+
+    return { firstAvailable, shortestThroughput };
+  };
+
+  const comparisonTableDateLabels = getComparisonTableDateLabels();
 
   if (showBookingForm) {
     return (
@@ -532,56 +562,6 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
 
-                {/* Dates display for 'days' mode - for 'hours' mode, this is moved to the sidebar */}
-                {!includeTime && (firstAvailableDateLabels || firstAvailableWindowLabels || shortestThroughputLabels) && (
-                  <div className='grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t'>
-                    {(firstAvailableWindowLabels || firstAvailableDateLabels) && (
-                      <div className='space-y-1'>
-                        <p className='text-sm text-gray-500'>First Available</p>
-                        {firstAvailableWindowLabels ? (
-                          <>
-                            <p className='font-medium text-gray-900'>
-                              {firstAvailableWindowLabels.viewerLabel}
-                            </p>
-                            <p className='text-xs text-gray-500'>
-                              Times shown in your timezone ({firstAvailableWindowLabels.viewerZone})
-                            </p>
-                          </>
-                        ) : firstAvailableDateLabels ? (
-                          <>
-                            <p className='font-medium text-gray-900'>
-                              {firstAvailableDateLabels.viewerLabel}
-                            </p>
-                            <p className='text-xs text-gray-500'>
-                              Times shown in your timezone ({firstAvailableDateLabels.viewerZone})
-                            </p>
-                          </>
-                        ) : null}
-                        {estimatedCompletionLabels && (
-                          <div className='mt-2'>
-                            <p className='text-xs text-gray-500'>
-                              Completion: {estimatedCompletionLabels.viewerLabel}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {shortestThroughputLabels && (
-                      <div className='space-y-1'>
-                        <p className='text-sm text-gray-500'>Shortest Throughput</p>
-                        <p className='font-medium text-gray-900'>
-                          {shortestThroughputLabels.viewerLabel}
-                        </p>
-                        <p className='text-xs text-gray-500'>
-                          Times shown in your timezone ({shortestThroughputLabels.viewerZone})
-                        </p>
-                        <p className='text-xs text-gray-500'>
-                          Based on minimum overlap and resource availability
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Project Timeline */}
                 {project.executionDuration && (
@@ -875,6 +855,9 @@ export default function ProjectDetailPage() {
                   subprojects={project.subprojects}
                   onSelectPackage={handleSelectPackage}
                   priceModel={project.priceModel}
+                  selectedIndex={viewedSubprojectIndex}
+                  onSelectIndex={setViewedSubprojectIndex}
+                  dateLabels={comparisonTableDateLabels}
                 />
               </div>
             )}
