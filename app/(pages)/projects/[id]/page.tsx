@@ -721,6 +721,9 @@ export default function ProjectDetailPage() {
                   selectedIndex={viewedSubprojectIndex}
                   onSelectIndex={setViewedSubprojectIndex}
                   dateLabels={comparisonTableDateLabels}
+                  timeMode={project.timeMode}
+                  companyAvailability={project.professionalId?.companyAvailability}
+                  companyBlockedRanges={project.professionalId?.companyBlockedRanges}
                 />
               </div>
             )}
@@ -892,6 +895,8 @@ export default function ProjectDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+
 
           </div>
         </div>
