@@ -320,26 +320,7 @@ export default function ProjectDetailPage() {
   const includeTime = project.timeMode === 'hours';
   const professionalTimeZone = project.professionalId?.businessInfo?.timezone || 'UTC';
 
-  const firstAvailableDateLabels = includeTime
-    ? formatProfessionalViewerLabel(derivedFirstAvailableDate, professionalTimeZone, viewerTimeZone)
-    : formatDateOnlyProfessionalViewer(derivedFirstAvailableDate, professionalTimeZone, viewerTimeZone);
-  const firstAvailableWindowLabels = formatWindowProfessionalViewer(firstAvailableWindow, professionalTimeZone, viewerTimeZone, includeTime);
-  const estimatedCompletionLabels = includeTime
-    ? formatProfessionalViewerLabel(firstAvailableWindow?.end, professionalTimeZone, viewerTimeZone)
-    : formatDateOnlyProfessionalViewer(firstAvailableWindow?.end, professionalTimeZone, viewerTimeZone);
-  const shortestThroughputLabels = !includeTime
-    ? formatWindowProfessionalViewer(
-      proposals?.shortestThroughputProposal,
-      professionalTimeZone,
-      viewerTimeZone,
-      includeTime
-    )
-    : null;
-  const firstAvailableSingleLabel = includeTime
-    ? (firstAvailableWindowLabels?.professionalLabel ||
-      firstAvailableDateLabels?.professionalLabel ||
-      null)
-    : null;
+
 
   const priceModelLabel = project.priceModel
     ? formatPriceModelLabel(project.priceModel)
@@ -350,27 +331,25 @@ export default function ProjectDetailPage() {
     qualityCertificates.length > 0 || warrantySummaries.length > 0;
 
   const getComparisonTableDateLabels = () => {
-    // Simplistic formatting: "MMM d, yyyy" (e.g. Feb 25, 2026) or "MMM d, yyyy HH:mm"
     // We strictly use viewerTimeZone
-
-    // First Available
     let firstAvailable = null;
-    if (firstAvailableWindow) {
-      // It's a window (start/end)
-      const label = includeTime
-        ? formatWindowProfessionalViewer(firstAvailableWindow, professionalTimeZone, viewerTimeZone, true)?.viewerLabel
-        : formatWindowProfessionalViewer(firstAvailableWindow, professionalTimeZone, viewerTimeZone, false)?.viewerLabel;
 
-      firstAvailable = label;
-    } else if (derivedFirstAvailableDate) {
-      // Just a start date
-      const label = includeTime
-        ? formatProfessionalViewerLabel(derivedFirstAvailableDate, professionalTimeZone, viewerTimeZone)?.viewerLabel
-        : formatDateOnlyProfessionalViewer(derivedFirstAvailableDate, professionalTimeZone, viewerTimeZone)?.viewerLabel;
-      firstAvailable = label;
+    if (includeTime) {
+      // For timemode hours: just show the first available date and time.
+      const dt = firstAvailableWindow?.start || derivedFirstAvailableDate;
+      if (dt) {
+        firstAvailable = formatProfessionalViewerLabel(dt, professionalTimeZone, viewerTimeZone, true)?.viewerLabel || null;
+      }
+    } else {
+      // For timemode days: show window or single date
+      if (firstAvailableWindow) {
+        firstAvailable = formatWindowProfessionalViewer(firstAvailableWindow, professionalTimeZone, viewerTimeZone, false)?.viewerLabel || null;
+      } else if (derivedFirstAvailableDate) {
+        firstAvailable = formatDateOnlyProfessionalViewer(derivedFirstAvailableDate, professionalTimeZone, viewerTimeZone)?.viewerLabel || null;
+      }
     }
 
-    // Shortest Throughput
+    // Shortest Throughput is NOT needed for hours timemode (includeTime === true)
     let shortestThroughput = null;
     if (!includeTime && proposals?.shortestThroughputProposal) {
       shortestThroughput = formatWindowProfessionalViewer(
@@ -378,7 +357,12 @@ export default function ProjectDetailPage() {
         professionalTimeZone,
         viewerTimeZone,
         false
-      )?.viewerLabel;
+      )?.viewerLabel || null;
+    }
+
+    // Hide shortest throughput if it provides redundant information
+    if (shortestThroughput === firstAvailable) {
+      shortestThroughput = null;
     }
 
     return { firstAvailable, shortestThroughput };
@@ -691,6 +675,116 @@ export default function ProjectDetailPage() {
               </Card>
             )}
 
+
+
+            {/* FAQ */}
+            {(project.faq?.length || 0) > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Frequently Asked Questions</CardTitle>
+                </CardHeader>
+                <CardContent className='space-y-4'>
+                  {(project.faq || []).map((item, idx) => (
+                    <div key={idx} className='space-y-2'>
+                      <h4 className='font-semibold'>{item.question}</h4>
+                      <p className='text-gray-600 text-sm'>{item.answer}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Reviews & More From This Professional</CardTitle>
+                <CardDescription>Coming soon in the next phase</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className='text-sm text-gray-600'>
+                  We&apos;re working on surfacing verified reviews and
+                  additional projects from this company. Stay tuned!
+                </p>
+              </CardContent>
+            </Card>
+
+          </div>
+
+          {/* Sidebar */}
+          <div className='space-y-6'>
+
+            {project.subprojects.length > 0 && (
+              <div className='bg-white rounded-lg shadow-sm p-4'>
+                <SubprojectComparisonTable
+                  subprojects={project.subprojects}
+                  onSelectPackage={handleSelectPackage}
+                  priceModel={project.priceModel}
+                  selectedIndex={viewedSubprojectIndex}
+                  onSelectIndex={setViewedSubprojectIndex}
+                  dateLabels={comparisonTableDateLabels}
+                />
+              </div>
+            )}
+
+            {/* Professional Info - Hidden until after booking */}
+            {project.professionalId && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Provided By</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='space-y-3'>
+                    <div className='flex items-center space-x-2'>
+                      <div className='h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg'>
+                        P
+                      </div>
+                      <div>
+                        <p className='font-semibold text-lg text-gray-900'>
+                          Verified Professional
+                        </p>
+                        <Badge variant='secondary' className='text-xs'>
+                          <CheckCircle className='w-3 h-3 mr-1' />
+                          Verified
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className='text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded p-3'>
+                      <strong>Note:</strong> Contact details will be revealed
+                      after you complete your booking and payment.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Extra Options */}
+            {project.extraOptions.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add-On Options</CardTitle>
+                </CardHeader>
+                <CardContent className='space-y-3'>
+                  {project.extraOptions.map((option, idx) => (
+                    <div
+                      key={idx}
+                      className='flex justify-between items-start text-sm'
+                    >
+                      <div>
+                        <p className='font-medium'>{option.name}</p>
+                        {option.description && (
+                          <p className='text-gray-600 text-xs'>
+                            {option.description}
+                          </p>
+                        )}
+                      </div>
+                      <p className='font-semibold text-blue-600'>
+                        {formatCurrency(option.price) ?? 'N/A'}
+                      </p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Company Working Hours & Availability */}
             {project.professionalId.companyAvailability && (
               <Card>
@@ -709,7 +803,7 @@ export default function ProjectDetailPage() {
                     <h4 className='font-semibold mb-3'>
                       Standard Working Days:
                     </h4>
-                    <div className='grid grid-cols-2 gap-2 text-sm'>
+                    <div className='grid grid-cols-1 gap-2 text-sm'>
                       {[
                         'monday',
                         'tuesday',
@@ -799,131 +893,10 @@ export default function ProjectDetailPage() {
               </Card>
             )}
 
-            {/* FAQ */}
-            {project.faq.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Frequently Asked Questions</CardTitle>
-                </CardHeader>
-                <CardContent className='space-y-4'>
-                  {project.faq.map((item, idx) => (
-                    <div key={idx} className='space-y-2'>
-                      <h4 className='font-semibold'>{item.question}</h4>
-                      <p className='text-gray-600 text-sm'>{item.answer}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Reviews & More From This Professional</CardTitle>
-                <CardDescription>Coming soon in the next phase</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className='text-sm text-gray-600'>
-                  We&apos;re working on surfacing verified reviews and
-                  additional projects from this company. Stay tuned!
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar */}
-          <div className='space-y-6'>
-            {includeTime && (firstAvailableWindowLabels || firstAvailableDateLabels) && (
-              <Card className="border-emerald-100 bg-emerald-50/30">
-                <CardContent className="p-4 flex items-start gap-3">
-                  <Calendar className="h-5 w-5 text-emerald-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold text-gray-900 text-sm">First Available</h4>
-                    <p className="text-emerald-700 font-medium mt-1">
-                      {firstAvailableWindowLabels?.viewerLabel || firstAvailableDateLabels?.viewerLabel}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Times shown in your timezone ({firstAvailableWindowLabels?.viewerZone || firstAvailableDateLabels?.viewerZone})
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {project.subprojects.length > 0 && (
-              <div className='bg-white rounded-lg shadow-sm p-4'>
-                <SubprojectComparisonTable
-                  subprojects={project.subprojects}
-                  onSelectPackage={handleSelectPackage}
-                  priceModel={project.priceModel}
-                  selectedIndex={viewedSubprojectIndex}
-                  onSelectIndex={setViewedSubprojectIndex}
-                  dateLabels={comparisonTableDateLabels}
-                />
-              </div>
-            )}
-
-            {/* Professional Info - Hidden until after booking */}
-            {project.professionalId && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Provided By</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='space-y-3'>
-                    <div className='flex items-center space-x-2'>
-                      <div className='h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg'>
-                        P
-                      </div>
-                      <div>
-                        <p className='font-semibold text-lg text-gray-900'>
-                          Verified Professional
-                        </p>
-                        <Badge variant='secondary' className='text-xs'>
-                          <CheckCircle className='w-3 h-3 mr-1' />
-                          Verified
-                        </Badge>
-                      </div>
-                    </div>
-                    <p className='text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded p-3'>
-                      <strong>Note:</strong> Contact details will be revealed
-                      after you complete your booking and payment.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Extra Options */}
-            {project.extraOptions.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Add-On Options</CardTitle>
-                </CardHeader>
-                <CardContent className='space-y-3'>
-                  {project.extraOptions.map((option, idx) => (
-                    <div
-                      key={idx}
-                      className='flex justify-between items-start text-sm'
-                    >
-                      <div>
-                        <p className='font-medium'>{option.name}</p>
-                        {option.description && (
-                          <p className='text-gray-600 text-xs'>
-                            {option.description}
-                          </p>
-                        )}
-                      </div>
-                      <p className='font-semibold text-blue-600'>
-                        +{formatCurrency(option.price)}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
+
