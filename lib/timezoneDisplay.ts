@@ -113,6 +113,7 @@ export const formatWindowProfessionalViewer = (
     const endLabel = end ? formatDateForZone(end, timeZone, options) : null;
 
     if (startLabel && endLabel) {
+      if (startLabel === endLabel) return startLabel;
       return `${startLabel} → ${endLabel}`;
     }
     return startLabel || endLabel || null;
@@ -171,6 +172,7 @@ export const formatWindowUtcViewer = (
     const endLabel = end ? formatDateForZone(end, timeZone, options) : null;
 
     if (startLabel && endLabel) {
+      if (startLabel === endLabel) return startLabel;
       return `${startLabel} → ${endLabel}`;
     }
     return startLabel || endLabel || null;
