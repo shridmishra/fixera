@@ -562,6 +562,7 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
 
+
                 {/* Project Timeline */}
                 {project.executionDuration && (
                   <div className='pt-4 border-t'>
@@ -831,6 +832,23 @@ export default function ProjectDetailPage() {
 
           {/* Sidebar */}
           <div className='space-y-6'>
+            {includeTime && (firstAvailableWindowLabels || firstAvailableDateLabels) && (
+              <Card className="border-emerald-100 bg-emerald-50/30">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <Calendar className="h-5 w-5 text-emerald-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-gray-900 text-sm">First Available</h4>
+                    <p className="text-emerald-700 font-medium mt-1">
+                      {firstAvailableWindowLabels?.viewerLabel || firstAvailableDateLabels?.viewerLabel}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Times shown in your timezone ({firstAvailableWindowLabels?.viewerZone || firstAvailableDateLabels?.viewerZone})
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {project.subprojects.length > 0 && (
               <div className='bg-white rounded-lg shadow-sm p-4'>
                 <SubprojectComparisonTable
