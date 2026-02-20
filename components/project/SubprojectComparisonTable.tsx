@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Check, Clock, Shield, ArrowRight } from 'lucide-react'
@@ -70,27 +70,41 @@ export default function SubprojectComparisonTable({
 
   const currentSubproject = subprojects[selectedIndex]
 
-  // Collect all unique included items across all subprojects, preserving their order of appearance
-  const includedItemsMap = new Map<string, { name: string; description?: string }>();
-  subprojects.forEach((sp) => {
-    if (!Array.isArray(sp.included)) return;
-    sp.included.forEach((item) => {
+  const allIncludedItems = useMemo(() => {
+    // Collect all unique included items across all subprojects, preserving their order of appearance
+    const includedItemsMap = new Map<string, { name: string; description?: string }>();
+    subprojects.forEach((sp) => {
+      if (!Array.isArray(sp.included)) return;
+      sp.included.forEach((item) => {
+        if (!item) return;
+        const name = typeof item === 'string' ? (item as string).trim() : item.name?.trim();
+        if (!name) return;
+
+        const description = typeof item === 'string' ? undefined : item.description;
+        const existing = includedItemsMap.get(name);
+
+        if (!existing) {
+          includedItemsMap.set(name, { name, description });
+        } else if (!existing.description && description) {
+          includedItemsMap.set(name, { name, description });
+        }
+      });
+    });
+
+    return Array.from(includedItemsMap.values());
+  }, [subprojects]);
+
+  const currentIncludedNames = useMemo(() => {
+    const names = new Set<string>();
+    (currentSubproject.included || []).forEach((item) => {
       if (!item) return;
       const name = typeof item === 'string' ? (item as string).trim() : item.name?.trim();
-      if (!name) return;
-
-      const description = typeof item === 'string' ? undefined : item.description;
-      const existing = includedItemsMap.get(name);
-
-      if (!existing) {
-        includedItemsMap.set(name, { name, description });
-      } else if (!existing.description && description) {
-        includedItemsMap.set(name, { name, description });
+      if (name) {
+        names.add(name);
       }
     });
-  });
-
-  const allIncludedItems = Array.from(includedItemsMap.values());
+    return names;
+  }, [currentSubproject.included]);
 
   return (
     <div className="w-full">
@@ -197,13 +211,7 @@ export default function SubprojectComparisonTable({
                 <h4 className="font-semibold text-base text-gray-900 mb-4">What&apos;s Included:</h4>
                 <div className="space-y-3">
                   {allIncludedItems.map((item, itemIdx) => {
-                    const isIncluded = (currentSubproject.included || []).some(
-                      (currItem) => {
-                        if (!currItem) return false;
-                        const currName = typeof currItem === 'string' ? (currItem as string).trim() : currItem.name?.trim();
-                        return currName === item.name;
-                      }
-                    )
+                    const isIncluded = currentIncludedNames.has(item.name);
                     return (
                       <div key={itemIdx} className="flex items-start space-x-3">
                         <Check className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isIncluded ? 'text-gray-900' : 'text-gray-300'}`} />
