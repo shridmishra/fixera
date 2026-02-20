@@ -33,7 +33,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getViewerTimezone, normalizeTimezone } from '@/lib/timezoneDisplay';
 import { formatCurrency } from '@/lib/formatters';
 
-// Get unit label from priceModel (e.g., "m² of floor surface" → "m²")
+// Get unit label from priceModel (e.g., "m² of floor surface" ? "m²")
 const getUnitLabel = (priceModel?: string): string => {
   if (!priceModel) return 'unit';
   const normalized = priceModel.toLowerCase().trim();
@@ -94,7 +94,7 @@ interface Project {
   _id: string;
   title: string;
   priceModel?: string;
-  timeMode?: 'hours' | 'days';
+  timeMode?: 'hours' | 'days' | 'mixed';
   preparationDuration?: {
     value: number;
     unit: 'hours' | 'days';
@@ -887,7 +887,7 @@ export default function ProjectBookingForm({
     if (!professionalAvailability) {
       // This should only happen during initial load before working hours are fetched
       debugWarn?.(
-        '[BOOKING] ⚠️ isProfessionalWorkingDay called before working hours loaded! Date:',
+        '[BOOKING] ?? isProfessionalWorkingDay called before working hours loaded! Date:',
         toLocalDateKey(date)
       );
       debugWarn?.(
@@ -1678,14 +1678,14 @@ export default function ProjectBookingForm({
         const slots = generateTimeSlotsForDate(checkDate);
         debugLog?.(`[getMinDate] ${dateStr} - Available slots:`, slots.length);
         if (slots.length > 0) {
-          debugLog?.(`[getMinDate] ✅ Found first available date: ${dateStr}`);
+          debugLog?.(`[getMinDate] ? Found first available date: ${dateStr}`);
           return dateStr;
         }
       } else {
         const blocked = isDateBlocked(dateStr);
         debugLog?.(`[getMinDate] ${dateStr} - Blocked: ${blocked}`);
         if (!blocked) {
-          debugLog?.(`[getMinDate] ✅ Found first available date: ${dateStr}`);
+          debugLog?.(`[getMinDate] ? Found first available date: ${dateStr}`);
           return dateStr;
         }
       }
@@ -1693,7 +1693,7 @@ export default function ProjectBookingForm({
       checkDate = addDays(checkDate, 1);
     }
 
-    debugWarn?.('[getMinDate] ⚠️ No available date found in 120 days!');
+    debugWarn?.('[getMinDate] ?? No available date found in 120 days!');
     return null;
   };
 

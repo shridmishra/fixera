@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { User, Mail, Phone, Shield, Calendar, Crown, Settings, TrendingUp, Users, Award, CheckCircle, XCircle, Clock, AlertTriangle, Plus, Briefcase, Package } from "lucide-react"
+import { User, Mail, Phone, Shield, Calendar, Crown, Settings, TrendingUp, Users, Award, CheckCircle, XCircle, Clock, AlertTriangle, Plus, Briefcase, Package, CreditCard, FileText } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -55,6 +55,13 @@ interface Booking {
   _id: string
   bookingType: "professional" | "project"
   status: BookingStatus
+  customer?: {
+    _id: string
+    name?: string
+    email?: string
+    phone?: string
+    customerType?: string
+  }
   rfqData?: {
     serviceType?: string
     description?: string
@@ -134,7 +141,6 @@ const getBookingStatusMeta = (status?: BookingStatus) => {
       "bg-slate-50 text-slate-700 border border-slate-100"
   }
 }
-
 const formatBudget = (booking: Booking): string | null => {
   const budget = booking.rfqData?.budget
   if (!budget || (budget.min == null && budget.max == null)) return null
@@ -173,9 +179,10 @@ export default function DashboardPage() {
     }
   }, [user])
 
-  // Fetch bookings for customer dashboard
+  // Fetch bookings for customer and professional dashboard
   useEffect(() => {
-    if (!user || !isAuthenticated || user.role !== "customer") return
+    if (!user || !isAuthenticated) return
+    if (user.role !== "customer" && user.role !== "professional") return
 
     const fetchBookings = async () => {
       setBookingsLoading(true)
@@ -241,7 +248,6 @@ export default function DashboardPage() {
 
       if (projectsResponse.ok) {
         const projectsData = await projectsResponse.json()
-        console.log('✅ Pending projects:', projectsData.length)
         setProjectStats({ pendingProjects: projectsData.length })
       }
 
@@ -295,16 +301,18 @@ export default function DashboardPage() {
                 Here you can track all your bookings and project requests.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="outline"
-                onClick={() => router.push("/projects")}
-                className="bg-white/70 backdrop-blur border border-pink-100 hover:border-pink-300"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Book another project
-              </Button>
-            </div>
+            {user?.role === 'customer' && (
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/")}
+                  className="bg-white/70 backdrop-blur border border-pink-100 hover:border-pink-300"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Book another project
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Summary cards */}
@@ -506,7 +514,7 @@ export default function DashboardPage() {
                           </div>
                         )}
 
-                        <div className="pt-2">
+                        <div className="pt-2 flex gap-2">
                           <Button
                             variant="outline"
                             size="sm"
@@ -515,6 +523,28 @@ export default function DashboardPage() {
                           >
                             View details
                           </Button>
+                          {/* Customer: Pay Now button */}
+                          {user?.role === 'customer' && (booking.status === 'quote_accepted' || booking.status === 'payment_pending') && (
+                            <Button
+                              size="sm"
+                              onClick={() => router.push(`/bookings/${booking._id}/payment`)}
+                              className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                              <CreditCard className="h-3 w-3 mr-1" />
+                              Pay Now
+                            </Button>
+                          )}
+                          {/* Professional: Submit Quote button */}
+                          {user?.role === 'professional' && booking.status === 'rfq' && (
+                            <Button
+                              size="sm"
+                              onClick={() => router.push(`/bookings/${booking._id}`)}
+                              className="text-xs bg-purple-600 hover:bg-purple-700 text-white"
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              Submit Quote
+                            </Button>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -672,11 +702,12 @@ export default function DashboardPage() {
           </div>
 
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
               <TabsTrigger value="loyalty">Loyalty System</TabsTrigger>
               <TabsTrigger value="approvals">Professional Approvals</TabsTrigger>
+              <TabsTrigger value="payments">Payments</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -951,6 +982,53 @@ export default function DashboardPage() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="payments" className="space-y-6">
+              {/* Payment Oversight */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-blue-500" />
+                    Payment Oversight
+                  </CardTitle>
+                  <CardDescription>Monitor and manage all platform payments</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    View all payment transactions, track escrow status, monitor transfers to professionals, and handle refunds.
+                  </p>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <Button
+                      onClick={() => window.open('/admin/payments', '_blank')}
+                      className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600"
+                    >
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      View All Payments
+                    </Button>
+                    <Button
+                      onClick={() => window.open('/admin/payments?status=authorized', '_blank')}
+                      variant="outline"
+                      className="w-full border-amber-200 hover:bg-amber-50"
+                    >
+                      <Shield className="h-4 w-4 mr-2" />
+                      View Authorized (Escrow)
+                    </Button>
+                  </div>
+
+                  <div className="mt-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-100">
+                    <h4 className="font-semibold mb-2 text-blue-900">Payment Features:</h4>
+                    <ul className="text-sm space-y-1 text-blue-800">
+                      <li>• View all payment transactions and statuses</li>
+                      <li>• Monitor funds held in escrow (authorized)</li>
+                      <li>• Track completed payouts to professionals</li>
+                      <li>• Review refunds and partial refunds</li>
+                      <li>• Search by booking number or Stripe ID</li>
+                      <li>• Filter by payment status</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
           </Tabs>
         </div>
       </div>
@@ -1078,11 +1156,11 @@ export default function DashboardPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => router.push('/professional/earnings')}
+                  onClick={() => router.push('/dashboard/payments')}
                   className="flex items-center gap-2"
                 >
                   <TrendingUp className="h-4 w-4" />
-                  View Earnings
+                  Payments & Stripe
                 </Button>
               </div>
             </CardContent>
@@ -1110,6 +1188,112 @@ export default function DashboardPage() {
                   {new Date(user?.updatedAt || '').toLocaleDateString()}
                 </span>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Bookings Section */}
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Client Bookings & Quotes
+              </CardTitle>
+              <CardDescription>Manage bookings from customers who booked your projects</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {bookingsLoading && (
+                <div className="text-center py-8 text-gray-500">
+                  Loading bookings...
+                </div>
+              )}
+
+              {!bookingsLoading && bookingsError && (
+                <div className="text-center py-4 text-red-600">
+                  {bookingsError}
+                </div>
+              )}
+
+              {!bookingsLoading && !bookingsError && bookings.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  No bookings yet. When customers book your projects, they&apos;ll appear here.
+                </div>
+              )}
+
+              {!bookingsLoading && !bookingsError && bookings.length > 0 && (
+                <div className="space-y-3">
+                  {bookings.slice(0, 5).map((booking) => {
+                    const isProject = booking.bookingType === "project"
+                    const title =
+                      (isProject ? booking.project?.title : booking.professional?.businessInfo?.companyName) ||
+                      booking.rfqData?.serviceType ||
+                      "Booking"
+
+                    const statusLabel = booking.status.replace(/_/g, " ")
+                    const statusClasses =
+                      BOOKING_STATUS_STYLES[booking.status] ||
+                      "bg-slate-50 text-slate-700 border border-slate-100"
+
+                    return (
+                      <div
+                        key={booking._id}
+                        className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              {isProject ? (
+                                <Package className="h-4 w-4 text-indigo-500" />
+                              ) : (
+                                <Briefcase className="h-4 w-4 text-indigo-500" />
+                              )}
+                              <h3 className="font-semibold text-sm">{title}</h3>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-gray-600 mb-2">
+                              <span>Customer: {booking.customer?.name}</span>
+                              {booking.createdAt && (
+                                <span>• {new Date(booking.createdAt).toLocaleDateString()}</span>
+                              )}
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={`text-xs capitalize ${statusClasses}`}
+                            >
+                              {statusLabel}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/bookings/${booking._id}`)}
+                              className="text-xs"
+                            >
+                              View
+                            </Button>
+                            {booking.status === 'rfq' && (
+                              <Button
+                                size="sm"
+                                onClick={() => router.push(`/bookings/${booking._id}`)}
+                                className="text-xs bg-purple-600 hover:bg-purple-700 text-white"
+                              >
+                                <FileText className="h-3 w-3 mr-1" />
+                                Quote
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {bookings.length > 5 && (
+                    <div className="text-center pt-2">
+                      <p className="text-xs text-gray-500">
+                        Showing 5 of {bookings.length} bookings
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
