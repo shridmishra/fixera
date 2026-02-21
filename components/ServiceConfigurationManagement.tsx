@@ -158,13 +158,34 @@ export default function ServiceConfigurationManagement() {
         if (!item.isDynamic || !item.dynamicField) return false
         const df = item.dynamicField
         // Require at least fieldName and label
-        return Boolean(df.fieldName && df.label)
+        if (!df.fieldName || !df.label) return false
+
+        const fieldType = df.fieldType || 'text'
+
+        // Type-specific validations
+        if (fieldType === 'dropdown') {
+          if (!df.options || df.options.length === 0) {
+            console.warn(`Skipping dynamic field "${df.label}": missing options for dropdown type.`)
+            return false
+          }
+        }
+
+        if (fieldType === 'range') {
+          const hasMin = df.min !== undefined && df.min !== null
+          const hasMax = df.max !== undefined && df.max !== null
+          if (!hasMin || !hasMax || Number(df.min) >= Number(df.max)) {
+            console.warn(`Skipping dynamic field "${df.label}": invalid min/max range.`)
+            return false
+          }
+        }
+
+        return true
       })
       .map((item) => {
         const df = item.dynamicField!
         return {
           fieldName: df.fieldName!,
-          fieldType: df.fieldType || 'text', // Default to text if not set
+          fieldType: (df.fieldType || 'text') as DynamicField['fieldType'],
           label: df.label!,
           isRequired: df.isRequired ?? true,
           unit: df.unit || '',
