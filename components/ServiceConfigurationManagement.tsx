@@ -29,7 +29,7 @@ import { iconMapData } from "@/data/icons"
 
 interface DynamicField {
   fieldName: string
-  fieldType: 'range' | 'dropdown' | 'number' | 'text'
+  fieldType: 'range' | 'dropdown' | 'number' | 'text' | 'select' | 'slider'
   unit?: string
   label: string
   placeholder?: string
@@ -163,18 +163,36 @@ export default function ServiceConfigurationManagement() {
         const fieldType = df.fieldType || 'text'
 
         // Type-specific validations
-        if (fieldType === 'dropdown') {
+        if (fieldType === 'dropdown' || (fieldType as string) === 'select') {
           if (!df.options || df.options.length === 0) {
-            console.warn(`Skipping dynamic field "${df.label}": missing options for dropdown type.`)
+            console.warn(`Skipping dynamic field "${df.label}": missing options for ${fieldType} type.`)
             return false
           }
         }
 
-        if (fieldType === 'range') {
+        if (fieldType === 'range' || (fieldType as string) === 'slider') {
+          const hasMin = df.min !== undefined && df.min !== null && !isNaN(Number(df.min))
+          const hasMax = df.max !== undefined && df.max !== null && !isNaN(Number(df.max))
+          if (!hasMin || !hasMax || Number(df.min) >= Number(df.max)) {
+            console.warn(`Skipping dynamic field "${df.label}": invalid min/max range for ${fieldType} type.`)
+            return false
+          }
+        }
+
+        if (fieldType === 'text' || fieldType === 'number') {
           const hasMin = df.min !== undefined && df.min !== null
           const hasMax = df.max !== undefined && df.max !== null
-          if (!hasMin || !hasMax || Number(df.min) >= Number(df.max)) {
-            console.warn(`Skipping dynamic field "${df.label}": invalid min/max range.`)
+
+          if (hasMin && isNaN(Number(df.min))) {
+            console.warn(`Skipping dynamic field "${df.label}": min value is not numeric for ${fieldType} type.`)
+            return false
+          }
+          if (hasMax && isNaN(Number(df.max))) {
+            console.warn(`Skipping dynamic field "${df.label}": max value is not numeric for ${fieldType} type.`)
+            return false
+          }
+          if (hasMin && hasMax && Number(df.min) >= Number(df.max)) {
+            console.warn(`Skipping dynamic field "${df.label}": min must be less than max for ${fieldType} type.`)
             return false
           }
         }
@@ -190,8 +208,8 @@ export default function ServiceConfigurationManagement() {
           isRequired: df.isRequired ?? true,
           unit: df.unit || '',
           placeholder: df.placeholder || '',
-          min: df.min,
-          max: df.max,
+          min: df.min !== undefined && df.min !== null ? Number(df.min) : undefined,
+          max: df.max !== undefined && df.max !== null ? Number(df.max) : undefined,
           options: df.options || []
         }
       })

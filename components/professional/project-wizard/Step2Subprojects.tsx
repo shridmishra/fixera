@@ -100,7 +100,7 @@ interface ISubproject {
 
 interface IDynamicField {
   fieldName: string;
-  fieldType: 'range' | 'dropdown' | 'number' | 'text';
+  fieldType: 'range' | 'dropdown' | 'number' | 'text' | 'select' | 'slider';
   unit?: string;
   label: string;
   placeholder?: string;
