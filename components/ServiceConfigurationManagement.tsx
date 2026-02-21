@@ -670,7 +670,11 @@ export default function ServiceConfigurationManagement() {
                       <Label htmlFor="pricingModelType">Pricing Type *</Label>
                       <Select
                         value={formData.pricingModelType}
-                        onValueChange={(val: 'Fixed price' | 'Price per unit') => setFormData(prev => ({ ...prev, pricingModelType: val }))}
+                        onValueChange={(val: 'Fixed price' | 'Price per unit') => setFormData(prev => ({
+                          ...prev,
+                          pricingModelType: val,
+                          pricingModelUnit: val === 'Fixed price' ? '' : prev.pricingModelUnit
+                        }))}
                       >
                         <SelectTrigger id="pricingModelType" className="bg-white">
                           <SelectValue placeholder="Select type" />
