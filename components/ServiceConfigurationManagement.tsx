@@ -325,6 +325,11 @@ export default function ServiceConfigurationManagement() {
 
   // Handle save button click
   const handleSave = () => {
+    if (formData.pricingModelType === 'Price per unit' && !formData.pricingModelUnit) {
+      toast.error('Please specify a unit when "Price per unit" is selected.')
+      return
+    }
+
     if (editingId) {
       updateService(editingId)
     } else {
@@ -865,14 +870,18 @@ export default function ServiceConfigurationManagement() {
                         placeholder="Condition or warning text"
                         className="flex-1 bg-white"
                       />
-                      <select
-                        className="border rounded px-2 py-1 bg-white relative z-[9999]"
+                      <Select
                         value={cw.type}
-                        onChange={(e) => updateConditionWarning(index, 'type', e.target.value as 'condition' | 'warning')}
+                        onValueChange={(val: 'condition' | 'warning') => updateConditionWarning(index, 'type', val)}
                       >
-                        <option value="condition">Condition</option>
-                        <option value="warning">Warning</option>
-                      </select>
+                        <SelectTrigger className="bg-white w-32 relative z-[9999]">
+                          <SelectValue placeholder="Type" />
+                        </SelectTrigger>
+                        <SelectContent className="z-[9999] bg-white">
+                          <SelectItem value="condition">Condition</SelectItem>
+                          <SelectItem value="warning">Warning</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button
                         onClick={() => removeConditionWarning(index)}
                         variant="ghost"
@@ -972,25 +981,28 @@ export default function ServiceConfigurationManagement() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
                           <Label className="text-xs">Type</Label>
-                          <select
-                            className="border rounded px-2 py-1 bg-white w-full relative z-[9999]"
+                          <Select
                             value={item.dynamicField?.fieldType || 'text'}
-                            onChange={(e) => {
-                              const v = e.target.value as DynamicField['fieldType']
+                            onValueChange={(val: DynamicField['fieldType']) => {
                               setFormData(prev => ({
                                 ...prev,
                                 includedItems: prev.includedItems.map((it, i) => i === index ? ({
                                   ...it,
-                                  dynamicField: { ...(it.dynamicField || {}), fieldType: v }
+                                  dynamicField: { ...(it.dynamicField || {}), fieldType: val }
                                 }) : it)
                               }))
                             }}
                           >
-                            <option value="text">Text</option>
-                            <option value="number">Number</option>
-                            <option value="dropdown">Dropdown</option>
-                            <option value="range">Range</option>
-                          </select>
+                            <SelectTrigger className="bg-white w-full relative z-[9999]">
+                              <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent className="z-[9999] bg-white">
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="dropdown">Dropdown</SelectItem>
+                              <SelectItem value="range">Range</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div>
                           <Label className="text-xs">Unit</Label>

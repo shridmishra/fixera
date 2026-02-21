@@ -845,8 +845,8 @@ export default function Step2Subprojects({
                         <SelectContent>
                           {validPricingTypes.map((pricingType) => (
                             <SelectItem key={pricingType} value={pricingType}>
-                              {pricingType === 'fixed' && (data.priceModel || 'Fixed Price (Total)')}
-                              {pricingType === 'unit' && (data.priceModel || `Price per ${unitLabel}`)}
+                              {pricingType === 'fixed' && (data.priceModel || pricingModelType || 'Fixed Price (Total)')}
+                              {pricingType === 'unit' && (data.priceModel || pricingModelType || `Price per ${unitLabel}`)}
                               {pricingType === 'rfq' &&
                                 'RFQ (Request for Quote)'}
                             </SelectItem>
@@ -856,9 +856,9 @@ export default function Step2Subprojects({
                       <p className='text-xs text-gray-500'>
                         Current selection:{' '}
                         {subproject.pricing.type === 'fixed' &&
-                          (data.priceModel || 'Fixed Price (Total)')}
+                          (data.priceModel || pricingModelType || 'Fixed Price (Total)')}
                         {subproject.pricing.type === 'unit' &&
-                          (data.priceModel || `Price per ${unitLabel}`)}
+                          (data.priceModel || pricingModelType || `Price per ${unitLabel}`)}
                         {subproject.pricing.type === 'rfq' &&
                           'Request for Quote'}
                         {!subproject.pricing.type && 'None'}
