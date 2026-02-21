@@ -153,17 +153,18 @@ export default function ServiceConfigurationManagement() {
 
   // Helper to safely compute and validate professional input fields
   const computeProfessionalInputFields = (items: IncludedItem[]): DynamicField[] => {
-    const isCompleteDynamicField = (df?: Partial<DynamicField>): df is DynamicField => {
-      return !!(df?.fieldName && df?.fieldType && df?.label)
-    }
-
     return items
-      .filter((item) => item.isDynamic && isCompleteDynamicField(item.dynamicField))
+      .filter((item) => {
+        if (!item.isDynamic || !item.dynamicField) return false
+        const df = item.dynamicField
+        // Require at least fieldName and label
+        return Boolean(df.fieldName && df.label)
+      })
       .map((item) => {
         const df = item.dynamicField!
         return {
           fieldName: df.fieldName!,
-          fieldType: df.fieldType!,
+          fieldType: df.fieldType || 'text', // Default to text if not set
           label: df.label!,
           isRequired: df.isRequired ?? true,
           unit: df.unit || '',
