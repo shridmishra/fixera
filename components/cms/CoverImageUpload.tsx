@@ -114,7 +114,7 @@ export default function CoverImageUpload({ value, onChange, required, recommende
             {uploading ? <Loader2 className="animate-spin" size={12} /> : <ImagePlus size={12} />} Replace image
           </button>
           {recommendedSize && (
-            <span className="text-[11px] text-rose-400">{recommendedSize}</span>
+            <span className="text-xs font-medium text-rose-500">{recommendedSize}</span>
           )}
         </div>
       )}
