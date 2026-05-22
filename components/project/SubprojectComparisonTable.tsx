@@ -77,11 +77,16 @@ export default function SubprojectComparisonTable({
   }
 
   const formatProfessionalInputValue = (
-    value: string | number | { min: number; max: number } | undefined
+    value: string | number | { min: number; max: number } | undefined,
+    unitSuffix?: string
   ): string => {
     if (value == null || value === '') return 'Not provided'
+    const suffix = unitSuffix ? ` ${unitSuffix}` : ''
     if (typeof value === 'object' && 'min' in value && 'max' in value) {
-      return `${value.min} - ${value.max}`
+      return `${value.min}${suffix} - ${value.max}${suffix}`
+    }
+    if (typeof value === 'number') {
+      return `${value}${suffix}`
     }
     return String(value)
   }
@@ -162,12 +167,28 @@ export default function SubprojectComparisonTable({
     const paramMap = new Map(
       (currentSubproject?.professionalInputs || []).map((p) => [normalize(p.fieldName), p])
     );
+    const priceModelLower = (priceModel || '').toLowerCase();
+    const priceModelIsRealUnit =
+      Boolean(priceModel) &&
+      !isSuffixlessPriceModel(priceModelLower) &&
+      (currentSubproject?.pricing?.type || '').toLowerCase() === 'unit';
     return allIncludedItems.map((item) => {
       const match = paramMap.get(normalize(item.name));
       const hasValue = match && match.value != null && match.value !== '';
-      return { ...item, paramValue: hasValue ? formatProfessionalInputValue(match.value) : undefined };
+      const valueIsNumeric =
+        typeof match?.value === 'number' ||
+        (typeof match?.value === 'object' && match?.value != null && 'min' in match.value);
+      const nameLower = item.name.toLowerCase();
+      const suffix =
+        priceModelIsRealUnit &&
+        valueIsNumeric &&
+        priceModel &&
+        !nameLower.includes(priceModelLower)
+          ? priceModel
+          : undefined;
+      return { ...item, paramValue: hasValue ? formatProfessionalInputValue(match!.value, suffix) : undefined };
     });
-  }, [allIncludedItems, currentSubproject?.professionalInputs]);
+  }, [allIncludedItems, currentSubproject?.professionalInputs, currentSubproject?.pricing?.type, priceModel]);
 
   if (!subprojects || subprojects.length === 0 || !currentSubproject) {
     return null;
@@ -375,44 +396,6 @@ export default function SubprojectComparisonTable({
                 </div>
               </div>
             )}
-
-            {/* Service parameters — show all professionalInputs with values */}
-            {(currentSubproject.professionalInputs || []).length > 0 && (() => {
-              const subprojectPricingType = (currentSubproject.pricing?.type || '').toLowerCase()
-              const priceModelLower = (priceModel || '').toLowerCase()
-              const priceModelIsRealUnit =
-                Boolean(priceModel) &&
-                !isSuffixlessPriceModel(priceModelLower) &&
-                subprojectPricingType !== 'rfq' &&
-                subprojectPricingType !== 'fixed'
-              return (
-                <div className="mb-8 border-t border-gray-100 pt-6">
-                  <h4 className="font-semibold text-base text-gray-900 mb-4">Details:</h4>
-                  <div className="space-y-2">
-                    {(currentSubproject.professionalInputs || []).map((input, idx) => {
-                      const label = (input.fieldName || '')
-                        .replace(/([a-z])([A-Z])/g, '$1 $2')
-                        .replace(/_/g, ' ')
-                        .trim()
-                        .replace(/^./, (c) => c.toUpperCase())
-                      const formattedValue = formatProfessionalInputValue(input.value)
-                      const unitSuffixForValue =
-                        priceModelIsRealUnit && typeof input.value === 'number' && !label.toLowerCase().includes(priceModelLower)
-                          ? ` ${priceModel}`
-                          : ''
-                      return (
-                        <div key={`${input.fieldName}-${idx}`} className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2">
-                          <span className="text-sm font-medium text-gray-900">{label || 'Parameter'}</span>
-                          <span className="text-sm font-semibold text-gray-900">
-                            {formattedValue}{unitSuffixForValue}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })()}
 
             {/* Materials — always shown with included / not included indicator */}
             <div className="mb-8 border-t border-gray-100 pt-6">

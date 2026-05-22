@@ -151,7 +151,7 @@ interface BookingDetail {
     amount?: number
     currency?: string
     description?: string
-    breakdown?: Array<{ item: string; amount: number }>
+    breakdown?: Array<{ item: string; amount?: number; quantity?: number; unitPrice?: number; totalPrice?: number }>
     validUntil?: string
     termsAndConditions?: string
     estimatedDuration?: string
@@ -2005,21 +2005,31 @@ export default function BookingDetailPage() {
         return false
       }
 
-      let quantityInput = inputs.find((p) => {
-        const name = (p.fieldName || '').toLowerCase()
-        return quantityTokens.some((t) => t && name.includes(t)) && isNumericValue(p.value)
+      let estimatedUnits = 0
+      const breakdownPackageBase = (booking?.quote?.breakdown || []).find((b) => {
+        const item = (b.item || '').toLowerCase()
+        return item.includes('package base') || item === 'unit base' || item.startsWith('package_base')
       })
-      if (!quantityInput) {
-        quantityInput = inputs.find((p) => isNumericValue(p.value))
+      if (breakdownPackageBase?.quantity && Number.isFinite(breakdownPackageBase.quantity) && breakdownPackageBase.quantity > 0) {
+        estimatedUnits = Number(breakdownPackageBase.quantity)
       }
 
-      let estimatedUnits = 0
-      if (quantityInput) {
-        const rawValue: unknown = quantityInput.value
-        if (typeof rawValue === 'object' && rawValue != null && 'min' in rawValue) {
-          estimatedUnits = Number((rawValue as { min: unknown }).min)
-        } else {
-          estimatedUnits = Number(rawValue)
+      if (estimatedUnits <= 0) {
+        let quantityInput = inputs.find((p) => {
+          const name = (p.fieldName || '').toLowerCase()
+          return quantityTokens.some((t) => t && name.includes(t)) && isNumericValue(p.value)
+        })
+        if (!quantityInput) {
+          quantityInput = inputs.find((p) => isNumericValue(p.value))
+        }
+
+        if (quantityInput) {
+          const rawValue: unknown = quantityInput.value
+          if (typeof rawValue === 'object' && rawValue != null && 'min' in rawValue) {
+            estimatedUnits = Number((rawValue as { min: unknown }).min)
+          } else {
+            estimatedUnits = Number(rawValue)
+          }
         }
       }
       if (!Number.isFinite(estimatedUnits) || estimatedUnits <= 0) {
@@ -4561,19 +4571,24 @@ export default function BookingDetailPage() {
                       <Button size="sm" variant="ghost" onClick={() => removeExtraCost(i)} className="text-red-500 h-6 text-xs">Remove</Button>
                     </div>
 
-                    {cost.type === 'unit_adjustment' && (
+                    {cost.type === 'unit_adjustment' && (() => {
+                      const projectPriceModel = (booking?.project as { priceModel?: string } | undefined)?.priceModel || ''
+                      const unitLabel = projectPriceModel && !/^(rfq|fixed|total|unit)/i.test(projectPriceModel.trim())
+                        ? projectPriceModel
+                        : 'Units'
+                      return (
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <Label className="text-xs">Estimated Units</Label>
+                          <Label className="text-xs">Estimated {unitLabel}</Label>
                           <Input
                             type="number"
                             value={cost.estimatedUnits || ''}
-                            onChange={(e) => updateExtraCost(i, 'estimatedUnits', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm"
+                            disabled
+                            className="h-8 text-sm bg-gray-100"
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Actual Units</Label>
+                          <Label className="text-xs">Actual {unitLabel}</Label>
                           <Input type="number" value={cost.actualUnits || ''} onChange={(e) => updateExtraCost(i, 'actualUnits', parseFloat(e.target.value) || 0)} className="h-8 text-sm" />
                         </div>
                         <div>
@@ -4586,7 +4601,8 @@ export default function BookingDetailPage() {
                           />
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
 
                     {cost.type === 'condition' && (
                       <div>

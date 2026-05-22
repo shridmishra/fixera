@@ -572,10 +572,9 @@ export default function ProjectDetailPage() {
     qualityCertificates.length > 0 || warrantySummaries.length > 0;
   const customerPresenceLabel = project.customerPresence
     ? CUSTOMER_PRESENCE_LABELS[project.customerPresence] || project.customerPresence
-    : null;
+    : 'Not specified';
   const projectTermsConditions = project.termsConditions || [];
-  const hasPresenceConditionsSection =
-    Boolean(customerPresenceLabel) || projectTermsConditions.length > 0;
+  const hasPresenceConditionsSection = true;
 
   const getComparisonTableDateLabels = () => {
     // We strictly use viewerTimeZone
@@ -955,17 +954,18 @@ export default function ProjectDetailPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='space-y-5'>
-                  {customerPresenceLabel && (
-                    <div className='rounded-lg border border-blue-100 bg-blue-50 px-4 py-3'>
-                      <div className='flex items-center gap-2 text-sm font-semibold text-blue-900'>
-                        <User className='h-4 w-4' />
-                        Customer Presence
-                      </div>
-                      <p className='mt-1 text-sm text-blue-800'>
-                        {customerPresenceLabel}
-                      </p>
+                  <div className='rounded-lg border border-blue-100 bg-blue-50 px-4 py-3'>
+                    <div className='flex items-center gap-2 text-sm font-semibold text-blue-900'>
+                      <User className='h-4 w-4' />
+                      Customer Presence
                     </div>
-                  )}
+                    <p className='mt-1 text-sm text-blue-800'>
+                      {customerPresenceLabel}
+                    </p>
+                    <p className='mt-2 text-xs text-blue-700'>
+                      If this presence requirement is not met at the time of service, an additional fee may be charged.
+                    </p>
+                  </div>
 
                   {projectTermsConditions.length > 0 && (
                     <div className='space-y-3'>
@@ -1003,6 +1003,14 @@ export default function ProjectDetailPage() {
                                 <p className='mt-2 text-sm text-gray-600'>
                                   {term.description}
                                 </p>
+                                {!isWarning &&
+                                  term.additionalCost != null &&
+                                  Number.isFinite(term.additionalCost) &&
+                                  term.additionalCost > 0 && (
+                                    <p className='mt-2 text-xs text-orange-700'>
+                                      If this condition is not met at the time of service, a fee may be charged.
+                                    </p>
+                                  )}
                               </div>
 
                               {!isWarning &&

@@ -108,8 +108,6 @@ interface BookingTimelineBoardProps {
 }
 
 const ACTIVE_TIMELINE_STATUSES = new Set<BookingStatus>([
-  "quote_accepted",
-  "payment_pending",
   "booked",
   "rescheduling_requested",
   "in_progress",
@@ -123,10 +121,6 @@ const DAY_WIDTH = 40
 const ROW_LABEL_WIDTH = 200
 
 const BAR_META: Record<string, { label: string; className: string }> = {
-  awaiting_payment: {
-    label: "Awaiting Payment",
-    className: "bg-amber-500/90 border border-amber-600/80 text-white",
-  },
   booked: {
     label: "Booked",
     className: "bg-red-500/90 border border-red-600/80 text-white",
@@ -713,15 +707,16 @@ export default function BookingTimelineBoard({
                   ? booking.customer?.name
                   : booking.professional?.username || booking.professional?.name || booking.professional?.businessInfo?.companyName
                 const actions = renderActionButtons(booking)
+                const rowHeight = actions.length > 0 ? 72 : 48
 
                 return (
-                  <div key={booking._id} className="flex flex-col justify-center border-b border-slate-200 px-2 py-1.5" style={{ minHeight: "48px" }}>
+                  <div key={booking._id} className="flex flex-col justify-center border-b border-slate-200 px-2 py-1.5 overflow-hidden" style={{ height: `${rowHeight}px` }}>
                     <p className="text-xs font-semibold text-slate-900 truncate leading-tight">{projectName}</p>
                     {counterpartyName && (
                       <p className="text-[10px] text-slate-500 truncate leading-tight">{counterpartyName}</p>
                     )}
                     {actions.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
+                      <div className="flex flex-nowrap gap-1 mt-1 overflow-hidden">
                         {actions}
                       </div>
                     )}

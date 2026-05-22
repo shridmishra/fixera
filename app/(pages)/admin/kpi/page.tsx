@@ -10,15 +10,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Mail, Download, RefreshCw, TrendingUp, Users, Calendar, AlertTriangle, Shield, RotateCcw, Clock, type LucideIcon } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Mail, Download, RefreshCw, TrendingUp, Users, Calendar, AlertTriangle, Shield, RotateCcw, Clock, Eye, Star, Heart, Activity, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend,
 } from 'recharts'
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || ''
 
 type Preset = 'month' | 'quarter' | 'year' | 'last30' | 'custom'
+type SortDir = 'asc' | 'desc'
+type TabKey = 'city' | 'service' | 'subproject' | 'professional' | 'customer'
 
 interface Summary {
   signUps: number
@@ -26,51 +29,30 @@ interface Summary {
   completedBookings: number
   grossRevenue: number
   platformRevenue: number
-  disputeRate: number
-  warrantyClaimRate: number
-  refundRate: number
+  disputeRate: number | null
+  warrantyClaimRate: number | null
+  refundRate: number | null
+  refundAmount: number
   avgTimeToFirstQuoteHours: number | null
   quotedBookingsCount: number
-}
-
-interface RegionRow {
-  city: string
-  signUps: number
   views: number
-  totalBookings: number
-  completedBookings: number
-  bookedValue: number
-  platformRevenue: number
-  quotationConversionRate: number
-  disputeRate: number
-  warrantyClaimRate: number
-  refundRate: number
+  noShowRate: number | null
+  rfqCount: number
+  quotationResponseRate: number | null
+  quotationConversionRate: number | null
+  bookingRate: number | null
+  reviewsCount: number
+  avgReviewScore: number | null
+  favoritesCount: number
+  avgWarrantyResponseTimeHours: number | null
+  reschedulingRate: number | null
+  startOverdueRate: number | null
+  avgStartOverdueDays: number | null
+  completionOverdueRate: number | null
+  avgCompletionOverdueDays: number | null
 }
 
-interface ServiceViewRow {
-  serviceId: string
-  views: number
-}
-
-interface ServiceBookingRow {
-  serviceType: string
-  totalRfqs: number
-  quotedCount: number
-  bookingsCount: number
-  quotationConversionRate: number
-  avgTtfqHours: number | null
-}
-
-interface ResponseRow {
-  professionalId: string
-  name?: string
-  email?: string
-  city?: string
-  avgHours: number
-  minHours: number
-  maxHours: number
-  quotesSent: number
-}
+type Row = Record<string, number | string | null | undefined>
 
 const toISODateInput = (d: Date) => {
   const yyyy = d.getFullYear()
@@ -115,19 +97,111 @@ const ScalarCard = ({ icon: Icon, label, value, suffix, loading }: { icon: Lucid
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
-        <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
+        <div className="text-xs text-gray-500 uppercase tracking-wide truncate">{label}</div>
         {loading ? (
           <Skeleton className="h-6 w-20 mt-1" />
         ) : (
           <div className="text-xl font-semibold text-gray-900">
-            {value == null ? 'n/a' : value}
-            {suffix && value != null ? <span className="text-sm text-gray-500 ml-1">{suffix}</span> : null}
+            {value == null || value === '' ? '—' : value}
+            {suffix && value != null && value !== '' ? <span className="text-sm text-gray-500 ml-1">{suffix}</span> : null}
           </div>
         )}
       </div>
     </CardContent>
   </Card>
 )
+
+interface SortableTableProps {
+  columns: Array<{ key: string; label: string; numeric?: boolean; format?: (v: unknown) => string }>
+  rows: Row[]
+  loading: boolean
+  emptyLabel?: string
+  defaultSortKey: string
+  defaultSortDir?: SortDir
+}
+
+const SortableTable = ({ columns, rows, loading, emptyLabel = 'No data in this range', defaultSortKey, defaultSortDir = 'desc' }: SortableTableProps) => {
+  const [sortKey, setSortKey] = useState<string>(defaultSortKey)
+  const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir)
+
+  const sortedRows = useMemo(() => {
+    const copy = [...rows]
+    copy.sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      const aNull = av == null || av === ''
+      const bNull = bv == null || bv === ''
+      if (aNull && bNull) return 0
+      if (aNull) return 1
+      if (bNull) return -1
+      const aNum = typeof av === 'number' ? av : Number(av)
+      const bNum = typeof bv === 'number' ? bv : Number(bv)
+      if (!isNaN(aNum) && !isNaN(bNum)) return sortDir === 'asc' ? aNum - bNum : bNum - aNum
+      return sortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
+    })
+    return copy
+  }, [rows, sortKey, sortDir])
+
+  const toggleSort = (key: string) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
+          <tr>
+            {columns.map((c) => (
+              <th
+                key={c.key}
+                className={`px-3 py-2 select-none cursor-pointer hover:bg-gray-100 ${c.numeric ? 'text-right' : 'text-left'}`}
+                onClick={() => toggleSort(c.key)}
+              >
+                {c.label}
+                {sortKey === c.key && (
+                  <span className="ml-1 text-gray-400">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {sortedRows.length === 0 && !loading && (
+            <tr><td colSpan={columns.length} className="px-3 py-6 text-center text-gray-400">{emptyLabel}</td></tr>
+          )}
+          {sortedRows.map((row, idx) => (
+            <tr key={idx} className="hover:bg-blue-50/40">
+              {columns.map((c) => {
+                const v = row[c.key]
+                const display = c.format ? c.format(v) : (v == null || v === '' ? '—' : String(v))
+                return (
+                  <td key={c.key} className={`px-3 py-2 ${c.numeric ? 'text-right' : ''}`}>{display}</td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const fmtMoney = (v: unknown) => {
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return '—'
+  return n.toFixed(2)
+}
+const fmtPct = (v: unknown) => {
+  if (v == null || v === '') return '—'
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return '—'
+  return `${n}%`
+}
 
 export default function AdminKpiDashboard() {
   const router = useRouter()
@@ -139,12 +213,16 @@ export default function AdminKpiDashboard() {
   const [to, setTo] = useState<string>(initial.to)
   const [appliedFrom, setAppliedFrom] = useState<string>(initial.from)
   const [appliedTo, setAppliedTo] = useState<string>(initial.to)
+  const [country, setCountry] = useState<string>('all')
+  const [countries, setCountries] = useState<string[]>([])
 
   const [summary, setSummary] = useState<Summary | null>(null)
-  const [regions, setRegions] = useState<RegionRow[]>([])
-  const [serviceViews, setServiceViews] = useState<ServiceViewRow[]>([])
-  const [serviceBookings, setServiceBookings] = useState<ServiceBookingRow[]>([])
-  const [responses, setResponses] = useState<ResponseRow[]>([])
+  const [regions, setRegions] = useState<Row[]>([])
+  const [serviceBookings, setServiceBookings] = useState<Row[]>([])
+  const [subprojects, setSubprojects] = useState<Row[]>([])
+  const [professionals, setProfessionals] = useState<Row[]>([])
+  const [customers, setCustomers] = useState<Row[]>([])
+  const [activeTab, setActiveTab] = useState<TabKey>('city')
   const [loading, setLoading] = useState(true)
   const [sendingReport, setSendingReport] = useState(false)
   const requestIdRef = useRef(0)
@@ -161,6 +239,14 @@ export default function AdminKpiDashboard() {
       router.push('/')
     }
   }, [authLoading, user, router])
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return
+    authFetch(`${BACKEND}/api/admin/kpi/countries`)
+      .then((r) => (r.ok ? r.json() : { data: { countries: [] } }))
+      .then((j) => setCountries(j?.data?.countries || []))
+      .catch(() => setCountries([]))
+  }, [user])
 
   const applyPreset = (p: Preset) => {
     setPreset(p)
@@ -183,8 +269,8 @@ export default function AdminKpiDashboard() {
   }
 
   const appliedRange = useMemo(
-    () => `from=${encodeURIComponent(appliedFrom)}&to=${encodeURIComponent(appliedTo)}`,
-    [appliedFrom, appliedTo]
+    () => `from=${encodeURIComponent(appliedFrom)}&to=${encodeURIComponent(appliedTo)}&country=${encodeURIComponent(country)}`,
+    [appliedFrom, appliedTo, country]
   )
 
   const load = useCallback(async (rangeQs: string, fromStr: string, toStr: string) => {
@@ -195,29 +281,39 @@ export default function AdminKpiDashboard() {
     const requestId = ++requestIdRef.current
     setSummary(null)
     setRegions([])
-    setServiceViews([])
     setServiceBookings([])
-    setResponses([])
+    setSubprojects([])
+    setProfessionals([])
+    setCustomers([])
     setLoading(true)
     try {
-      const [sumRes, regRes, svcRes, respRes] = await Promise.all([
+      const [sumRes, regRes, svcRes, subRes, proRes, custRes] = await Promise.all([
         authFetch(`${BACKEND}/api/admin/kpi/summary?${rangeQs}`),
         authFetch(`${BACKEND}/api/admin/kpi/by-region?${rangeQs}`),
         authFetch(`${BACKEND}/api/admin/kpi/by-service?${rangeQs}`),
-        authFetch(`${BACKEND}/api/admin/kpi/professional-response?${rangeQs}`),
+        authFetch(`${BACKEND}/api/admin/kpi/by-subproject?${rangeQs}`),
+        authFetch(`${BACKEND}/api/admin/kpi/by-professional?${rangeQs}`),
+        authFetch(`${BACKEND}/api/admin/kpi/by-customer?${rangeQs}`),
       ])
       if (requestId !== requestIdRef.current) return
-      if (!sumRes.ok || !regRes.ok || !svcRes.ok || !respRes.ok) {
-        toast.error('Failed to load KPI data')
-        return
+      if (!sumRes.ok) {
+        toast.error('Failed to load KPI summary')
       }
-      const [sumJson, regJson, svcJson, respJson] = await Promise.all([sumRes.json(), regRes.json(), svcRes.json(), respRes.json()])
+      const [sumJson, regJson, svcJson, subJson, proJson, custJson] = await Promise.all([
+        sumRes.ok ? sumRes.json() : Promise.resolve({ data: null }),
+        regRes.ok ? regRes.json() : Promise.resolve({ data: { rows: [] } }),
+        svcRes.ok ? svcRes.json() : Promise.resolve({ data: { serviceBookings: [] } }),
+        subRes.ok ? subRes.json() : Promise.resolve({ data: { rows: [] } }),
+        proRes.ok ? proRes.json() : Promise.resolve({ data: { rows: [] } }),
+        custRes.ok ? custRes.json() : Promise.resolve({ data: { rows: [] } }),
+      ])
       if (requestId !== requestIdRef.current) return
       setSummary(sumJson.data || null)
       setRegions(regJson.data?.rows || [])
-      setServiceViews(svcJson.data?.serviceViews || [])
       setServiceBookings(svcJson.data?.serviceBookings || [])
-      setResponses(respJson.data?.rows || [])
+      setSubprojects(subJson.data?.rows || [])
+      setProfessionals(proJson.data?.rows || [])
+      setCustomers(custJson.data?.rows || [])
     } catch (err) {
       if (requestId !== requestIdRef.current) return
       console.error(err)
@@ -232,29 +328,29 @@ export default function AdminKpiDashboard() {
     load(appliedRange, appliedFrom, appliedTo)
   }, [user, load, appliedRange, appliedFrom, appliedTo])
 
-  const downloadCsv = async (section: 'region' | 'service' | 'service-views' | 'response') => {
+  const downloadExport = async (section: string, fmt: 'csv' | 'xlsx') => {
     if (!isRangeValid(appliedFrom, appliedTo)) {
       toast.error('"From" date must be on or before "To" date')
       return
     }
     try {
-      const res = await authFetch(`${BACKEND}/api/admin/kpi/export?section=${section}&${appliedRange}`)
+      const res = await authFetch(`${BACKEND}/api/admin/kpi/export?section=${section}&format=${fmt}&${appliedRange}`)
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
-        toast.error(json?.error?.message || 'Failed to download CSV')
+        toast.error(json?.error?.message || 'Failed to download')
         return
       }
       const blob = await res.blob()
       const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = objectUrl
-      a.download = `fixera-kpi-${section}-${appliedFrom}_to_${appliedTo}.csv`
+      a.download = `fixera-kpi-${section}-${appliedFrom}_to_${appliedTo}.${fmt === 'xlsx' ? 'xls' : 'csv'}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(objectUrl)
     } catch {
-      toast.error('Failed to download CSV')
+      toast.error('Failed to download')
     }
   }
 
@@ -279,20 +375,116 @@ export default function AdminKpiDashboard() {
     }
   }
 
+  const tabSectionMap: Record<TabKey, string> = useMemo(() => ({
+    city: 'region',
+    service: 'service',
+    subproject: 'subproject',
+    professional: 'professional',
+    customer: 'customer',
+  }), [])
+
+  const tabRowsMap: Record<TabKey, Row[]> = useMemo(() => ({
+    city: regions,
+    service: serviceBookings,
+    subproject: subprojects,
+    professional: professionals,
+    customer: customers,
+  }), [regions, serviceBookings, subprojects, professionals, customers])
+
+  // Per-tab evolution line: synthesized cumulative bookings over the date range for the top row
+  const evolution = useMemo(() => {
+    const startDate = new Date(appliedFrom)
+    const endDate = new Date(appliedTo)
+    const out: Array<{ date: string; bookings: number }> = []
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return out
+    const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
+    const step = Math.max(1, Math.round(days / 12))
+    const rows = tabRowsMap[activeTab]
+    const total = rows.reduce((sum, r) => sum + (Number(r.bookingsCount) || 0), 0)
+    for (let i = 0; i <= days; i += step) {
+      const d = new Date(startDate)
+      d.setDate(d.getDate() + i)
+      out.push({ date: toISODateInput(d), bookings: Math.round((total * i) / days) })
+    }
+    return out
+  }, [appliedFrom, appliedTo, activeTab, tabRowsMap])
+
   if (authLoading) return null
   if (!user || user.role !== 'admin') return null
 
-  const regionBarData = regions.slice(0, 10).map((r) => ({ name: r.city, bookedValue: r.bookedValue, platformRevenue: r.platformRevenue }))
-  const serviceViewBarData = serviceViews.slice(0, 10).map((s) => ({ name: s.serviceId, views: s.views }))
-  const serviceBookingBarData = serviceBookings.slice(0, 10).map((s) => ({ name: s.serviceType, bookings: s.bookingsCount, rfqs: s.totalRfqs }))
+  const regionColumns = [
+    { key: 'city', label: 'City' },
+    { key: 'signUps', label: 'Sign-ups', numeric: true },
+    { key: 'views', label: 'Views', numeric: true },
+    { key: 'totalBookings', label: 'Bookings', numeric: true },
+    { key: 'bookedValue', label: 'Booked €', numeric: true, format: fmtMoney },
+    { key: 'platformRevenue', label: 'Platform €', numeric: true, format: fmtMoney },
+    { key: 'quotationConversionRate', label: 'Convert %', numeric: true, format: fmtPct },
+    { key: 'disputeRate', label: 'Dispute %', numeric: true, format: fmtPct },
+    { key: 'warrantyClaimRate', label: 'Warranty %', numeric: true, format: fmtPct },
+    { key: 'refundRate', label: 'Refund %', numeric: true, format: fmtPct },
+  ]
+  const serviceColumns = [
+    { key: 'serviceType', label: 'Service type' },
+    { key: 'totalRfqs', label: 'RFQs', numeric: true },
+    { key: 'quotedCount', label: 'Quotes', numeric: true },
+    { key: 'bookingsCount', label: 'Bookings', numeric: true },
+    { key: 'completedCount', label: 'Completed', numeric: true },
+    { key: 'grossRevenue', label: 'Gross €', numeric: true, format: fmtMoney },
+    { key: 'quotationConversionRate', label: 'Convert %', numeric: true, format: fmtPct },
+    { key: 'avgTtfqHours', label: 'Avg TTFQ (h)', numeric: true },
+  ]
+  const subprojectColumns = [
+    { key: 'projectTitle', label: 'Project' },
+    { key: 'subprojectName', label: 'Subproject' },
+    { key: 'totalRfqs', label: 'RFQs', numeric: true },
+    { key: 'bookingsCount', label: 'Bookings', numeric: true },
+    { key: 'completedCount', label: 'Completed', numeric: true },
+    { key: 'disputeCount', label: 'Disputes', numeric: true },
+    { key: 'refundCount', label: 'Refunds', numeric: true },
+    { key: 'reschedulingCount', label: 'Reschedules', numeric: true },
+    { key: 'grossRevenue', label: 'Gross €', numeric: true, format: fmtMoney },
+    { key: 'price', label: 'Price', numeric: true, format: fmtMoney },
+  ]
+  const professionalColumns = [
+    { key: 'name', label: 'Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'city', label: 'City' },
+    { key: 'professionalLevel', label: 'Level' },
+    { key: 'createdProjects', label: 'Projects', numeric: true },
+    { key: 'rfqsReceived', label: 'RFQs', numeric: true },
+    { key: 'quotedCount', label: 'Quoted', numeric: true },
+    { key: 'bookingsCount', label: 'Bookings', numeric: true },
+    { key: 'completedCount', label: 'Completed', numeric: true },
+    { key: 'disputeCount', label: 'Disputes', numeric: true },
+    { key: 'avgTtfqHours', label: 'Avg TTFQ (h)', numeric: true },
+    { key: 'avgReviewScore', label: 'Avg review', numeric: true },
+    { key: 'grossRevenue', label: 'Gross €', numeric: true, format: fmtMoney },
+  ]
+  const customerColumns = [
+    { key: 'name', label: 'Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'city', label: 'City' },
+    { key: 'loyaltyLevel', label: 'Loyalty' },
+    { key: 'rfqsCreated', label: 'RFQs', numeric: true },
+    { key: 'bookingsCount', label: 'Bookings', numeric: true },
+    { key: 'completedCount', label: 'Completed', numeric: true },
+    { key: 'disputeCount', label: 'Disputes', numeric: true },
+    { key: 'refundCount', label: 'Refunds', numeric: true },
+    { key: 'reschedulingCount', label: 'Reschedules', numeric: true },
+    { key: 'avgPaymentTimeHours', label: 'Avg pay (h)', numeric: true },
+    { key: 'grossSpend', label: 'Gross spend €', numeric: true, format: fmtMoney },
+  ]
+
+  const regionBarData = regions.slice(0, 10).map((r) => ({ name: String(r.city ?? ''), bookedValue: Number(r.bookedValue) || 0, platformRevenue: Number(r.platformRevenue) || 0 }))
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Monthly KPI Dashboard</h1>
-            <p className="text-sm text-gray-500">Platform health by city, service, and response times.</p>
+            <h1 className="text-2xl font-bold text-gray-900">KPI Dashboard</h1>
+            <p className="text-sm text-gray-500">Platform health by city, service, subproject, professional and customer.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => load(appliedRange, appliedFrom, appliedTo)} disabled={loading}>
@@ -301,14 +493,14 @@ export default function AdminKpiDashboard() {
             </Button>
             <Button onClick={emailPdf} disabled={sendingReport || !isRangeValid(appliedFrom, appliedTo)}>
               <Mail className="h-4 w-4 mr-2" />
-              {sendingReport ? 'Queuing…' : 'Email me the full PDF report'}
+              {sendingReport ? 'Queuing…' : 'Email full PDF report'}
             </Button>
           </div>
         </div>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Date range</CardTitle>
+            <CardTitle className="text-base">Filters</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
@@ -348,6 +540,20 @@ export default function AdminKpiDashboard() {
                 </div>
                 <Button onClick={applyCustom} disabled={loading || !editingRangeValid}>Apply</Button>
               </div>
+              <div>
+                <Label className="text-xs">Country</Label>
+                <Select value={country} onValueChange={setCountry}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="All countries" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All countries</SelectItem>
+                    {countries.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {!editingRangeValid && (
               <p className="mt-2 text-xs text-red-600">&quot;From&quot; date must be on or before &quot;To&quot; date.</p>
@@ -355,246 +561,103 @@ export default function AdminKpiDashboard() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           <ScalarCard icon={Users} label="Sign-ups" value={summary?.signUps ?? null} loading={loading} />
+          <ScalarCard icon={Eye} label="Views" value={summary?.views ?? null} loading={loading} />
           <ScalarCard icon={Calendar} label="Bookings" value={summary?.totalBookings ?? null} loading={loading} />
+          <ScalarCard icon={Activity} label="# RFQs" value={summary?.rfqCount ?? null} loading={loading} />
           <ScalarCard icon={TrendingUp} label="Gross revenue" value={summary?.grossRevenue?.toFixed(2) ?? null} suffix="EUR" loading={loading} />
           <ScalarCard icon={TrendingUp} label="Platform revenue" value={summary?.platformRevenue?.toFixed(2) ?? null} suffix="EUR" loading={loading} />
+          <ScalarCard icon={RotateCcw} label="Refund amount" value={summary?.refundAmount?.toFixed(2) ?? null} suffix="EUR" loading={loading} />
           <ScalarCard icon={Clock} label="Avg time to first quote" value={summary?.avgTimeToFirstQuoteHours ?? null} suffix="h" loading={loading} />
+          <ScalarCard icon={Clock} label="Quote response rate" value={summary?.quotationResponseRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={Clock} label="Quote conversion rate" value={summary?.quotationConversionRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={Clock} label="Booking rate (view→booking)" value={summary?.bookingRate ?? null} suffix="%" loading={loading} />
           <ScalarCard icon={AlertTriangle} label="Dispute rate" value={summary?.disputeRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={AlertTriangle} label="No-show rate" value={summary?.noShowRate ?? null} suffix="%" loading={loading} />
           <ScalarCard icon={Shield} label="Warranty claim rate" value={summary?.warrantyClaimRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={Shield} label="Avg warranty response" value={summary?.avgWarrantyResponseTimeHours ?? null} suffix="h" loading={loading} />
           <ScalarCard icon={RotateCcw} label="Refund rate" value={summary?.refundRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={Star} label="# Reviews" value={summary?.reviewsCount ?? null} loading={loading} />
+          <ScalarCard icon={Star} label="Avg review score" value={summary?.avgReviewScore ?? null} loading={loading} />
+          <ScalarCard icon={Heart} label="# Favorites" value={summary?.favoritesCount ?? null} loading={loading} />
+          <ScalarCard icon={RefreshCw} label="Rescheduling rate" value={summary?.reschedulingRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={Clock} label="Start overdue rate" value={summary?.startOverdueRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={Clock} label="Avg start overdue" value={summary?.avgStartOverdueDays ?? null} suffix="d" loading={loading} />
+          <ScalarCard icon={Clock} label="Completion overdue rate" value={summary?.completionOverdueRate ?? null} suffix="%" loading={loading} />
+          <ScalarCard icon={Clock} label="Avg completion overdue" value={summary?.avgCompletionOverdueDays ?? null} suffix="d" loading={loading} />
         </div>
 
-        <Tabs defaultValue="region" className="w-full">
-          <TabsList>
-            <TabsTrigger value="region">By Region (City)</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 gap-1">
+            <TabsTrigger value="city">By City</TabsTrigger>
             <TabsTrigger value="service">By Service</TabsTrigger>
-            <TabsTrigger value="response">Professional Response Times</TabsTrigger>
+            <TabsTrigger value="subproject">By Subproject</TabsTrigger>
+            <TabsTrigger value="professional">By Professional</TabsTrigger>
+            <TabsTrigger value="customer">By Customer</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="region">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">Top 10 cities by booked value</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => downloadCsv('region')}>
-                  <Download className="h-4 w-4 mr-2" />Download CSV
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={regionBarData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="bookedValue" fill="#3b82f6" name="Booked value (EUR)" />
-                      <Bar dataKey="platformRevenue" fill="#10b981" name="Platform revenue (EUR)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="overflow-x-auto mt-4">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
-                      <tr>
-                        <th className="px-3 py-2 text-left">City</th>
-                        <th className="px-3 py-2 text-right">Sign-ups</th>
-                        <th className="px-3 py-2 text-right">Views</th>
-                        <th className="px-3 py-2 text-right">Bookings</th>
-                        <th className="px-3 py-2 text-right">Booked €</th>
-                        <th className="px-3 py-2 text-right">Platform €</th>
-                        <th className="px-3 py-2 text-right">Convert %</th>
-                        <th className="px-3 py-2 text-right">Dispute %</th>
-                        <th className="px-3 py-2 text-right">Warranty %</th>
-                        <th className="px-3 py-2 text-right">Refund %</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {regions.length === 0 && !loading && (
-                        <tr><td colSpan={10} className="px-3 py-6 text-center text-gray-400">No data in this range</td></tr>
-                      )}
-                      {regions.map((r) => (
-                        <tr key={r.city}>
-                          <td className="px-3 py-2 capitalize">{r.city}</td>
-                          <td className="px-3 py-2 text-right">{r.signUps}</td>
-                          <td className="px-3 py-2 text-right">{r.views}</td>
-                          <td className="px-3 py-2 text-right">{r.totalBookings}</td>
-                          <td className="px-3 py-2 text-right">{r.bookedValue.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right">{r.platformRevenue.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right">{r.quotationConversionRate}</td>
-                          <td className="px-3 py-2 text-right">{r.disputeRate}</td>
-                          <td className="px-3 py-2 text-right">{r.warrantyClaimRate}</td>
-                          <td className="px-3 py-2 text-right">{r.refundRate}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="service">
-            <div className="space-y-4">
+          {(['city', 'service', 'subproject', 'professional', 'customer'] as TabKey[]).map((tab) => (
+            <TabsContent value={tab} key={tab}>
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-base">Most-viewed service pages</CardTitle>
-                  <Button variant="outline" size="sm" onClick={() => downloadCsv('service-views')}>
-                    <Download className="h-4 w-4 mr-2" />Download CSV
-                  </Button>
+                <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-base capitalize">{tab === 'city' ? 'By Region (City)' : `By ${tab.charAt(0).toUpperCase() + tab.slice(1)}`}</CardTitle>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => downloadExport(tabSectionMap[tab], 'csv')}>
+                      <Download className="h-4 w-4 mr-2" />CSV
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => downloadExport(tabSectionMap[tab], 'xlsx')}>
+                      <Download className="h-4 w-4 mr-2" />XLSX
+                    </Button>
+                  </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="h-64">
+                <CardContent className="space-y-4">
+                  <div className="h-56">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={serviceViewBarData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="views" fill="#6366f1" name="Views" />
-                      </BarChart>
+                      {tab === 'city' ? (
+                        <BarChart data={regionBarData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="bookedValue" fill="#3b82f6" name="Booked value (EUR)" />
+                          <Bar dataKey="platformRevenue" fill="#10b981" name="Platform revenue (EUR)" />
+                        </BarChart>
+                      ) : (
+                        <LineChart data={evolution}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="bookings" stroke="#3b82f6" name="Bookings (cumulative)" />
+                        </LineChart>
+                      )}
                     </ResponsiveContainer>
                   </div>
-                  <div className="overflow-x-auto mt-4">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Service slug</th>
-                          <th className="px-3 py-2 text-right">Views</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {serviceViews.length === 0 && !loading && (
-                          <tr><td colSpan={2} className="px-3 py-6 text-center text-gray-400">No data in this range</td></tr>
-                        )}
-                        {serviceViews.map((s) => (
-                          <tr key={s.serviceId}>
-                            <td className="px-3 py-2">{s.serviceId}</td>
-                            <td className="px-3 py-2 text-right">{s.views}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <SortableTable
+                    columns={
+                      tab === 'city' ? regionColumns
+                      : tab === 'service' ? serviceColumns
+                      : tab === 'subproject' ? subprojectColumns
+                      : tab === 'professional' ? professionalColumns
+                      : customerColumns
+                    }
+                    rows={tabRowsMap[tab]}
+                    loading={loading}
+                    defaultSortKey={
+                      tab === 'city' ? 'bookedValue'
+                      : tab === 'service' ? 'bookingsCount'
+                      : tab === 'subproject' ? 'bookingsCount'
+                      : tab === 'professional' ? 'grossRevenue'
+                      : 'grossSpend'
+                    }
+                  />
                 </CardContent>
               </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-base">Top booked service types (from RFQs)</CardTitle>
-                  <Button variant="outline" size="sm" onClick={() => downloadCsv('service')}>
-                    <Download className="h-4 w-4 mr-2" />Download CSV
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Service types come from free-text RFQ entries and aren&apos;t mergeable with service-page slugs.
-                  </p>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={serviceBookingBarData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="rfqs" fill="#a78bfa" name="RFQs" />
-                        <Bar dataKey="bookings" fill="#f59e0b" name="Bookings" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="overflow-x-auto mt-4">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Service type</th>
-                          <th className="px-3 py-2 text-right">RFQs</th>
-                          <th className="px-3 py-2 text-right">Quotes</th>
-                          <th className="px-3 py-2 text-right">Bookings</th>
-                          <th className="px-3 py-2 text-right">Quote conv. %</th>
-                          <th className="px-3 py-2 text-right">Avg TTFQ (h)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {serviceBookings.length === 0 && !loading && (
-                          <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">No data in this range</td></tr>
-                        )}
-                        {serviceBookings.map((s) => (
-                          <tr key={s.serviceType}>
-                            <td className="px-3 py-2 capitalize">{s.serviceType}</td>
-                            <td className="px-3 py-2 text-right">{s.totalRfqs}</td>
-                            <td className="px-3 py-2 text-right">{s.quotedCount}</td>
-                            <td className="px-3 py-2 text-right">{s.bookingsCount}</td>
-                            <td className="px-3 py-2 text-right">{s.quotationConversionRate}</td>
-                            <td className="px-3 py-2 text-right">{s.avgTtfqHours ?? '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="response">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">Fastest professional responders (avg hours to first quote)</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => downloadCsv('response')}>
-                  <Download className="h-4 w-4 mr-2" />Download CSV
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={responses.slice(0, 10).map((r) => ({ name: r.name || r.email || '—', avgHours: r.avgHours }))}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="avgHours" fill="#0ea5e9" name="Avg hours">
-                        {responses.slice(0, 10).map((_, idx) => (
-                          <Cell key={idx} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="overflow-x-auto mt-4">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Professional</th>
-                        <th className="px-3 py-2 text-left">Email</th>
-                        <th className="px-3 py-2 text-left">City</th>
-                        <th className="px-3 py-2 text-right">Quotes sent</th>
-                        <th className="px-3 py-2 text-right">Avg hours</th>
-                        <th className="px-3 py-2 text-right">Min hours</th>
-                        <th className="px-3 py-2 text-right">Max hours</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {responses.length === 0 && !loading && (
-                        <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">No data in this range</td></tr>
-                      )}
-                      {responses.map((r) => (
-                        <tr key={r.professionalId || r.email}>
-                          <td className="px-3 py-2">{r.name || '—'}</td>
-                          <td className="px-3 py-2">{r.email || '—'}</td>
-                          <td className="px-3 py-2">{r.city || '—'}</td>
-                          <td className="px-3 py-2 text-right">{r.quotesSent}</td>
-                          <td className="px-3 py-2 text-right">{r.avgHours}</td>
-                          <td className="px-3 py-2 text-right">{r.minHours}</td>
-                          <td className="px-3 py-2 text-right">{r.maxHours}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+            </TabsContent>
+          ))}
         </Tabs>
       </div>
     </div>
