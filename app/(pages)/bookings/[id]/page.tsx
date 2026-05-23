@@ -151,7 +151,7 @@ interface BookingDetail {
     amount?: number
     currency?: string
     description?: string
-    breakdown?: Array<{ item: string; amount: number }>
+    breakdown?: Array<{ item: string; amount?: number; quantity?: number; unitPrice?: number; totalPrice?: number }>
     validUntil?: string
     termsAndConditions?: string
     estimatedDuration?: string
@@ -194,7 +194,7 @@ interface BookingDetail {
     subprojects?: Array<{
       name?: string
       pricing?: { type?: 'fixed' | 'unit' | 'rfq'; amount?: number }
-      professionalInputs?: Array<{ fieldName?: string; value?: string | number }>
+      professionalInputs?: Array<{ fieldName?: string; value?: string | number | { min?: number | string; max?: number | string } }>
     }>
     minResources?: number
     minOverlapPercentage?: number
@@ -1992,34 +1992,59 @@ export default function BookingDetailPage() {
       const quantityTokens = ['quantity', 'units', 'unit', 'amount', 'size', 'area', 'surface', 'length', 'width', 'height', 'volume', 'weight', 'pieces', 'count', 'hours', 'days', 'm2', 'm3']
       if (priceModelToken) quantityTokens.unshift(priceModelToken)
 
-      const isNumericValue = (v: unknown) => {
-        if (typeof v === 'number' && Number.isFinite(v) && v > 0) return true
-        if (typeof v === 'string') {
-          const n = Number(v.trim())
-          return Number.isFinite(n) && n > 0
+      const toPositiveFinite = (raw: unknown): number | undefined => {
+        if (raw == null || raw === '') return undefined
+        const n = typeof raw === 'number' ? raw : Number(typeof raw === 'string' ? raw.trim() : raw)
+        return Number.isFinite(n) && n > 0 ? n : undefined
+      }
+
+      const pickRangeValue = (v: object): number | undefined => {
+        if ('min' in v) {
+          const minNum = toPositiveFinite((v as { min: unknown }).min)
+          if (minNum !== undefined) return minNum
         }
-        if (typeof v === 'object' && v != null && 'min' in v && 'max' in v) {
-          const minNum = Number((v as { min: unknown }).min)
-          return Number.isFinite(minNum) && minNum > 0
+        if ('max' in v) {
+          const maxNum = toPositiveFinite((v as { max: unknown }).max)
+          if (maxNum !== undefined) return maxNum
+        }
+        return undefined
+      }
+
+      const isNumericValue = (v: unknown) => {
+        if (typeof v === 'number' || typeof v === 'string') {
+          return toPositiveFinite(v) !== undefined
+        }
+        if (typeof v === 'object' && v != null && ('min' in v || 'max' in v)) {
+          return pickRangeValue(v) !== undefined
         }
         return false
       }
 
-      let quantityInput = inputs.find((p) => {
-        const name = (p.fieldName || '').toLowerCase()
-        return quantityTokens.some((t) => t && name.includes(t)) && isNumericValue(p.value)
+      let estimatedUnits = 0
+      const breakdownPackageBase = (booking?.quote?.breakdown || []).find((b) => {
+        const item = (b.item || '').toLowerCase()
+        return item.includes('package base') || item === 'unit base' || item.startsWith('package_base')
       })
-      if (!quantityInput) {
-        quantityInput = inputs.find((p) => isNumericValue(p.value))
+      if (breakdownPackageBase?.quantity && Number.isFinite(breakdownPackageBase.quantity) && breakdownPackageBase.quantity > 0) {
+        estimatedUnits = Number(breakdownPackageBase.quantity)
       }
 
-      let estimatedUnits = 0
-      if (quantityInput) {
-        const rawValue: unknown = quantityInput.value
-        if (typeof rawValue === 'object' && rawValue != null && 'min' in rawValue) {
-          estimatedUnits = Number((rawValue as { min: unknown }).min)
-        } else {
-          estimatedUnits = Number(rawValue)
+      if (estimatedUnits <= 0) {
+        let quantityInput = inputs.find((p) => {
+          const name = (p.fieldName || '').toLowerCase()
+          return quantityTokens.some((t) => t && name.includes(t)) && isNumericValue(p.value)
+        })
+        if (!quantityInput) {
+          quantityInput = inputs.find((p) => isNumericValue(p.value))
+        }
+
+        if (quantityInput) {
+          const rawValue: unknown = quantityInput.value
+          if (typeof rawValue === 'object' && rawValue != null && ('min' in rawValue || 'max' in rawValue)) {
+            estimatedUnits = pickRangeValue(rawValue) ?? 0
+          } else {
+            estimatedUnits = toPositiveFinite(rawValue) ?? 0
+          }
         }
       }
       if (!Number.isFinite(estimatedUnits) || estimatedUnits <= 0) {
@@ -4561,19 +4586,24 @@ export default function BookingDetailPage() {
                       <Button size="sm" variant="ghost" onClick={() => removeExtraCost(i)} className="text-red-500 h-6 text-xs">Remove</Button>
                     </div>
 
-                    {cost.type === 'unit_adjustment' && (
+                    {cost.type === 'unit_adjustment' && (() => {
+                      const projectPriceModel = (booking?.project as { priceModel?: string } | undefined)?.priceModel || ''
+                      const unitLabel = projectPriceModel && !/^(rfq|fixed|total|unit)/i.test(projectPriceModel.trim())
+                        ? projectPriceModel
+                        : 'Units'
+                      return (
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <Label className="text-xs">Estimated Units</Label>
+                          <Label className="text-xs">Estimated {unitLabel}</Label>
                           <Input
                             type="number"
                             value={cost.estimatedUnits || ''}
-                            onChange={(e) => updateExtraCost(i, 'estimatedUnits', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm"
+                            disabled
+                            className="h-8 text-sm bg-gray-100"
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Actual Units</Label>
+                          <Label className="text-xs">Actual {unitLabel}</Label>
                           <Input type="number" value={cost.actualUnits || ''} onChange={(e) => updateExtraCost(i, 'actualUnits', parseFloat(e.target.value) || 0)} className="h-8 text-sm" />
                         </div>
                         <div>
@@ -4586,7 +4616,8 @@ export default function BookingDetailPage() {
                           />
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
 
                     {cost.type === 'condition' && (
                       <div>
