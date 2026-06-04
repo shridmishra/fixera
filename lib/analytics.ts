@@ -204,14 +204,16 @@ export function setUserProperties(properties: Record<string, string | number | b
 /** Set the GA4 user ID */
 export function setUserId(userId: string | null) {
   if (!isBrowser() || !window.gtag) return;
+  // Always allow explicit logout clear to prevent stale identity carry-over.
+  if (userId === null) {
+    window.gtag('set', { user_id: null });
+    return;
+  }
+
   const consent = getConsent();
   if (!consent?.analytics) return;
-
-  if (userId) {
-    window.gtag('set', { user_id: userId });
-  } else {
-    window.gtag('set', { user_id: null });
-  }
+  window.gtag('set', { user_id: userId });
+}
 }
 
 // ---------------------------------------------------------------------------
