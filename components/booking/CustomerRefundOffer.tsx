@@ -22,18 +22,20 @@ interface CancellationRequest {
 export default function CustomerRefundOffer({ bookingId, currency = 'EUR', onResolved }: CustomerRefundOfferProps) {
   const [request, setRequest] = useState<CancellationRequest | null>(null)
   const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState(false)
 
   const load = useCallback(async () => {
     try {
       const res = await authFetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/bookings/${bookingId}/cancellation`)
       const json = await res.json()
       if (res.ok && json?.success) {
+        setLoadError(false)
         setRequest(json.data?.request || null)
       } else {
-        setRequest(null)
+        setLoadError(true)
       }
     } catch {
-      setRequest(null)
+      setLoadError(true)
     }
   }, [bookingId])
 
@@ -61,6 +63,15 @@ export default function CustomerRefundOffer({ bookingId, currency = 'EUR', onRes
     } finally {
       setBusy(false)
     }
+  }
+
+  if (loadError && !request) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 flex items-center justify-between gap-3">
+        <span>Couldn&apos;t load your refund status.</span>
+        <Button size="sm" variant="outline" onClick={load}>Retry</Button>
+      </div>
+    )
   }
 
   if (!request) return null
