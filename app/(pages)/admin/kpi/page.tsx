@@ -433,6 +433,11 @@ export default function AdminKpiDashboard() {
     customer: customers,
   }), [regions, serviceBookings, subprojects, professionals, customers])
 
+  const activeSorted = useMemo(
+    () => sortRows(tabRowsMap[activeTab], sortByTab[activeTab].key, sortByTab[activeTab].dir),
+    [activeTab, sortByTab, tabRowsMap]
+  )
+
   const toggleSortForTab = useCallback((tab: TabKey, key: string) => {
     setSortByTab((prev) => {
       const cur = prev[tab]
@@ -649,7 +654,7 @@ export default function AdminKpiDashboard() {
               : customerColumns
             const isActive = tab === activeTab
             const sort = sortByTab[tab]
-            const sorted = isActive ? sortRows(tabRowsMap[tab], sort.key, sort.dir) : []
+            const sorted = isActive ? activeSorted : []
             const selectedKey = selectedByTab[tab]
             const sortColumn = columns.find((c) => c.key === sort.key)
             const chartKey = sortColumn?.numeric ? sort.key : 'platformRevenue'
