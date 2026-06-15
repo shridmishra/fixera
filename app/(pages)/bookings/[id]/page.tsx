@@ -17,11 +17,13 @@ import { toast } from "sonner"
 import { type WarrantyClaimStatus, REASON_LABELS as warrantyReasonLabels, STATUS_LABELS as warrantyStatusLabels } from "@/lib/warrantyClaim"
 import { getAuthToken } from "@/lib/utils"
 import { RESCHEDULE_REASONS } from "@/lib/constants/rescheduleReasons"
+import { CANCEL_REASONS } from "@/lib/constants/cancelReasons"
 import { Skeleton } from "@/components/ui/skeleton"
 import StartChatButton from "@/components/chat/StartChatButton"
 import ReviewModal from "@/components/booking/ReviewModal"
 import QuotationWizard from "@/components/quotation/QuotationWizard"
 import AvailabilityDatePicker from "@/components/booking/AvailabilityDatePicker"
+import CustomerRefundOffer from "@/components/booking/CustomerRefundOffer"
 import { StripeProvider } from "@/components/stripe/StripeProvider"
 import { PaymentForm } from "@/components/stripe/PaymentForm"
 import type { QuoteVersion, BookingMilestone } from "@/types/quotation"
@@ -187,6 +189,7 @@ interface BookingDetail {
     service?: string
     description?: string
     timeMode?: 'hours' | 'days' | 'mixed'
+    executionDuration?: { value?: number; unit?: 'hours' | 'days' }
     rfqQuestions?: PostBookingQuestion[]
     postBookingQuestions?: PostBookingQuestion[]
     extraOptions?: Array<{ name?: string; price?: number }>
@@ -195,6 +198,7 @@ interface BookingDetail {
       name?: string
       pricing?: { type?: 'fixed' | 'unit' | 'rfq'; amount?: number }
       professionalInputs?: Array<{ fieldName?: string; value?: string | number | { min?: number | string; max?: number | string } }>
+      executionDuration?: { value?: number; unit?: 'hours' | 'days' }
     }>
     minResources?: number
     minOverlapPercentage?: number
@@ -370,6 +374,25 @@ type BookingApiResponse = {
   msg?: string
 }
 
+const resolveBookingIsDaysMode = (booking?: BookingDetail | null): boolean => {
+  const project = booking?.project
+  const subprojects = project?.subprojects
+  const selectedIndex = booking?.selectedSubprojectIndex
+  let unit: 'hours' | 'days' | undefined
+  if (subprojects && subprojects.length > 0) {
+    const sub =
+      typeof selectedIndex === 'number'
+        ? subprojects[selectedIndex]
+        : subprojects.length === 1
+        ? subprojects[0]
+        : undefined
+    unit = sub?.executionDuration?.unit
+  }
+  if (!unit) unit = project?.executionDuration?.unit
+  if (unit) return unit === 'days'
+  return project?.timeMode === 'days'
+}
+
 interface DiscountPreview {
   originalAmount: number
   loyaltyDiscount: {
@@ -417,6 +440,8 @@ const isHttpUrl = (value?: string | null) => {
     return false
   }
 }
+
+const CANCEL_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024
 
 const getFileLabel = (value?: string | null, fallback = "Open attachment") => {
   if (!value) return fallback
@@ -556,7 +581,11 @@ export default function BookingDetailPage() {
 
   // Customer cancel + reschedule state
   const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelReasonCategory, setCancelReasonCategory] = useState("")
   const [cancelReason, setCancelReason] = useState("")
+  const [cancelEvidence, setCancelEvidence] = useState<string[]>([])
+  const [uploadingCancelAttachment, setUploadingCancelAttachment] = useState(false)
+  const cancelUploadAbortRef = useRef<AbortController | null>(null)
   const [submittingCancel, setSubmittingCancel] = useState(false)
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [rescheduleDate, setRescheduleDate] = useState("")
@@ -1832,9 +1861,72 @@ export default function BookingDetailPage() {
     }
   }
 
+  const handleCancelAttachmentUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !bookingId) return
+    const remaining = 10 - cancelEvidence.length
+    if (remaining <= 0) {
+      toast.error("You can attach up to 10 files")
+      return
+    }
+    const valid: File[] = []
+    for (const file of Array.from(files)) {
+      const okType = /^(image\/|video\/)/.test(file.type) || file.type === "application/pdf"
+      if (!okType) {
+        toast.error(`${file.name}: unsupported file type`)
+        continue
+      }
+      if (file.size > CANCEL_ATTACHMENT_MAX_BYTES) {
+        toast.error(`${file.name}: exceeds ${CANCEL_ATTACHMENT_MAX_BYTES / (1024 * 1024)}MB limit`)
+        continue
+      }
+      valid.push(file)
+    }
+    const toUpload = valid.slice(0, remaining)
+    if (toUpload.length === 0) return
+    const controller = new AbortController()
+    cancelUploadAbortRef.current = controller
+    setUploadingCancelAttachment(true)
+    try {
+      const token = getAuthToken()
+      const headers: Record<string, string> = {}
+      if (token) headers.Authorization = `Bearer ${token}`
+      const formData = new FormData()
+      toUpload.forEach((file) => formData.append("files", file))
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/bookings/${bookingId}/dispute-upload`,
+        { method: "POST", credentials: "include", headers, body: formData, signal: controller.signal }
+      )
+      const result = await response.json()
+      if (controller.signal.aborted) return
+      const urls: string[] = (Array.isArray(result?.data?.urls) ? result.data.urls : [])
+        .filter((u: unknown): u is string => typeof u === "string" && /^https?:\/\//i.test(u))
+      if (response.ok && result.success && urls.length > 0) {
+        setCancelEvidence((prev) => [...prev, ...urls].slice(0, 10))
+        toast.success("Attachment uploaded")
+      } else {
+        toast.error(result?.error?.message || "Failed to upload attachment")
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return
+      console.error("Failed to upload cancellation attachment:", err)
+      toast.error("Failed to upload attachment. Please try again.")
+    } finally {
+      if (cancelUploadAbortRef.current === controller) cancelUploadAbortRef.current = null
+      setUploadingCancelAttachment(false)
+    }
+  }
+
+  const resetCancelForm = () => {
+    cancelUploadAbortRef.current?.abort()
+    cancelUploadAbortRef.current = null
+    setCancelReasonCategory("")
+    setCancelReason("")
+    setCancelEvidence([])
+  }
+
   const handleCustomerCancel = async () => {
-    if (!bookingId || !cancelReason.trim()) {
-      toast.error("Cancellation reason is required")
+    if (!bookingId || !CANCEL_REASONS.some((r) => r.value === cancelReasonCategory)) {
+      toast.error("Please select a valid cancellation reason")
       return
     }
     setSubmittingCancel(true)
@@ -1848,14 +1940,18 @@ export default function BookingDetailPage() {
           method: "POST",
           credentials: "include",
           headers,
-          body: JSON.stringify({ reason: cancelReason.trim() }),
+          body: JSON.stringify({
+            reasonCategory: cancelReasonCategory,
+            reason: cancelReason.trim() || undefined,
+            evidence: cancelEvidence,
+          }),
         }
       )
       const result = await response.json()
       if (response.ok && result.success) {
         toast.success(result.msg || "Cancellation request submitted")
         setShowCancelModal(false)
-        setCancelReason("")
+        resetCancelForm()
         await refreshBooking()
       } else {
         toast.error(result.msg || result.error?.message || "Failed to cancel booking")
@@ -1873,7 +1969,7 @@ export default function BookingDetailPage() {
       toast.error("New date and reason are required")
       return
     }
-    const isDaysMode = booking?.project?.timeMode === 'days'
+    const isDaysMode = resolveBookingIsDaysMode(booking)
     if (!isDaysMode && !rescheduleTime) {
       toast.error("Start time is required")
       return
@@ -2205,6 +2301,14 @@ export default function BookingDetailPage() {
           </Card>
         )}
 
+        {!error && user?.role === 'customer' && bookingId && (
+          <CustomerRefundOffer
+            bookingId={bookingId}
+            currency={booking?.payment?.currency || 'EUR'}
+            onResolved={refreshBooking}
+          />
+        )}
+
         {/* Refund banner — shown to customer when payment has been refunded */}
         {!error && user?.role === 'customer' && booking?.payment && (booking.payment.status === 'refunded' || booking.payment.status === 'partially_refunded') && (
           <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200">
@@ -2439,22 +2543,9 @@ export default function BookingDetailPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setRescheduleDate(booking.scheduledStartDate?.slice(0, 10) || "")
-                            setRescheduleTime(booking.scheduledStartTime || "")
-                            setRescheduleReason("")
-                            setRescheduleDescription("")
-                            setShowRescheduleModal(true)
-                          }}
-                        >
-                          Reschedule
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
                           className="border-rose-300 text-rose-700 hover:bg-rose-50"
                           onClick={() => {
-                            setCancelReason("")
+                            resetCancelForm()
                             setShowCancelModal(true)
                           }}
                         >
@@ -4815,29 +4906,74 @@ export default function BookingDetailPage() {
         </Dialog>
 
         {/* Customer Cancel Modal */}
-        <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
+        <Dialog open={showCancelModal} onOpenChange={(open) => { if (!open) resetCancelForm(); setShowCancelModal(open) }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Cancel Booking</DialogTitle>
-              <DialogDescription>Provide a reason for cancellation. An admin will review your request.</DialogDescription>
+              <DialogDescription>Select a reason for cancellation. Your refund request is sent to the professional, who has 5 business days to respond before it escalates to Fixera.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="cancel-reason">Reason</Label>
+                <Label htmlFor="cancel-reason-category">Reason</Label>
+                <Select value={cancelReasonCategory} onValueChange={setCancelReasonCategory}>
+                  <SelectTrigger id="cancel-reason-category">
+                    <SelectValue placeholder="Select a reason" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CANCEL_REASONS.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cancel-reason">Explanation (optional)</Label>
                 <Textarea
                   id="cancel-reason"
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
-                  className="min-h-[100px]"
-                  placeholder="Explain why you want to cancel..."
+                  className="min-h-[90px]"
+                  placeholder="Add any additional details..."
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="cancel-attachment">Attachment (optional)</Label>
+                <Input
+                  id="cancel-attachment"
+                  type="file"
+                  multiple
+                  accept="image/*,application/pdf,video/*"
+                  disabled={uploadingCancelAttachment || cancelEvidence.length >= 10}
+                  onChange={(e) => { handleCancelAttachmentUpload(e.target.files); e.target.value = "" }}
+                />
+                {uploadingCancelAttachment && (
+                  <p className="text-xs text-gray-500 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</p>
+                )}
+                {cancelEvidence.length > 0 && (
+                  <div className="space-y-1">
+                    {cancelEvidence.map((url, i) => (
+                      <div key={url} className="flex items-center justify-between gap-2 text-xs">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate">
+                          {getFileLabel(url, `Attachment ${i + 1}`)}
+                        </a>
+                        <button
+                          type="button"
+                          className="text-rose-600 hover:text-rose-700"
+                          onClick={() => setCancelEvidence((prev) => prev.filter((u) => u !== url))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setShowCancelModal(false)} disabled={submittingCancel}>Back</Button>
+                <Button variant="outline" onClick={() => { resetCancelForm(); setShowCancelModal(false) }} disabled={submittingCancel}>Back</Button>
                 <Button
                   className="bg-rose-600 hover:bg-rose-700 text-white"
                   onClick={handleCustomerCancel}
-                  disabled={submittingCancel || !cancelReason.trim()}
+                  disabled={submittingCancel || uploadingCancelAttachment || !cancelReasonCategory}
                 >
                   {submittingCancel ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                   Submit Cancellation
@@ -4855,18 +4991,19 @@ export default function BookingDetailPage() {
               <DialogDescription>Pick a new start date. Your professional will be notified.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
-              <div className={`grid gap-3 ${booking?.project?.timeMode === 'days' ? '' : 'sm:grid-cols-2'}`}>
+              <div className={`grid gap-3 ${resolveBookingIsDaysMode(booking) ? '' : 'sm:grid-cols-2'}`}>
                 <div className="space-y-2">
                   <Label htmlFor="customer-reschedule-date">New start date</Label>
                   <AvailabilityDatePicker
                     id="customer-reschedule-date"
                     projectId={booking?.project?._id}
+                    excludeBookingId={booking?._id}
                     value={rescheduleDate}
                     onChange={setRescheduleDate}
                     ariaLabel="New start date"
                   />
                 </div>
-                {booking?.project?.timeMode !== 'days' && (
+                {!resolveBookingIsDaysMode(booking) && (
                   <div className="space-y-2">
                     <Label htmlFor="customer-reschedule-time">Start time</Label>
                     <Input
@@ -4909,7 +5046,7 @@ export default function BookingDetailPage() {
                     submittingReschedule ||
                     !rescheduleDate ||
                     !rescheduleReason ||
-                    (booking?.project?.timeMode !== 'days' && !rescheduleTime)
+                    (!resolveBookingIsDaysMode(booking) && !rescheduleTime)
                   }
                 >
                   {submittingReschedule ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}

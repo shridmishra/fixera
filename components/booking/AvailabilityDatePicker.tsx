@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { format, isSameDay, parseISO, startOfDay, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 
 interface BlockedRange {
   startDate: string
@@ -13,6 +14,7 @@ interface BlockedRange {
 
 interface AvailabilityApiResponse {
   success: boolean
+  timezone?: string
   blockedDates?: string[]
   blockedRanges?: BlockedRange[]
 }
@@ -26,6 +28,7 @@ interface AvailabilityDatePickerProps {
   disabled?: boolean
   id?: string
   ariaLabel?: string
+  excludeBookingId?: string
 }
 
 const formatYMD = (d: Date) => format(d, 'yyyy-MM-dd')
@@ -39,6 +42,7 @@ export default function AvailabilityDatePicker({
   disabled = false,
   id,
   ariaLabel,
+  excludeBookingId,
 }: AvailabilityDatePickerProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -69,7 +73,10 @@ export default function AvailabilityDatePicker({
     setLoading(true)
     const fetchAvailability = async () => {
       try {
-        const url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/projects/${projectId}/availability`
+        let url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/projects/${projectId}/availability`
+        if (excludeBookingId) {
+          url += `${url.includes('?') ? '&' : '?'}excludeBookingId=${encodeURIComponent(excludeBookingId)}`
+        }
         const res = await fetch(url)
         if (!res.ok) {
           if (!cancelled) {
@@ -82,8 +89,19 @@ export default function AvailabilityDatePicker({
         const data: AvailabilityApiResponse = await res.json()
         if (cancelled) return
         if (data.success) {
-          setBlockedDates(new Set((data.blockedDates || []).map((d) => d.slice(0, 10))))
-          setBlockedRanges(data.blockedRanges || [])
+          const tz = data.timezone || 'UTC'
+          const toLocalYmd = (value: string) => {
+            const parsed = parseISO(value)
+            return isNaN(parsed.getTime()) ? value.slice(0, 10) : formatInTimeZone(parsed, tz, 'yyyy-MM-dd')
+          }
+          setBlockedDates(new Set((data.blockedDates || []).map(toLocalYmd)))
+          setBlockedRanges(
+            (data.blockedRanges || []).map((r) => ({
+              ...r,
+              startDate: toLocalYmd(r.startDate),
+              endDate: toLocalYmd(r.endDate),
+            }))
+          )
         } else {
           setBlockedDates(new Set())
           setBlockedRanges([])
@@ -102,7 +120,7 @@ export default function AvailabilityDatePicker({
     return () => {
       cancelled = true
     }
-  }, [projectId])
+  }, [projectId, excludeBookingId])
 
   useEffect(() => {
     if (!open) return
